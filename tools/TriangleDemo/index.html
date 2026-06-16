@@ -163,10 +163,14 @@
   <div class="interactive-layout">
     <div class="element-palette">
       <div class="card">
-        <div class="card-title"><span class="icon" style="background:#dbeafe;color:#1e40af;">+</span> 添加线段</div>
+        <div class="card-title"><span class="icon" style="background:#dbeafe;color:#1e40af;">+</span> 添加元素</div>
         <div class="palette-item" id="addLine">
           <div class="palette-icon line-icon"><svg width="24" height="24"><line x1="4" y1="20" x2="20" y2="4" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/></svg></div>
           <div><div style="font-weight:600;font-size:.85rem;">线段</div><div style="font-size:.75rem;color:var(--text-muted);">点击添加到画布</div></div>
+        </div>
+        <div class="palette-item" id="addAngle" style="margin-top:8px;">
+          <div class="palette-icon angle-icon"><svg width="24" height="24"><path d="M4 20 L20 20 M4 20 L12 6" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round"/></svg></div>
+          <div><div style="font-weight:600;font-size:.85rem;">角</div><div style="font-size:.75rem;color:var(--text-muted);">水平边+自由边，可调节角度</div></div>
         </div>
       </div>
       <div class="card">
@@ -436,11 +440,11 @@ genAndDraw('random');
 const iCanvas = document.getElementById('interactiveCanvas');
 const iCtx = iCanvas.getContext('2d');
 const SNAP_DIST = 14;
-let lines = [];
+let elements = []; // 统一存储线段和角
 let selectedEl = null;
-let dragging = null; // { line, pointIndex }
+let dragging = null;
 let nextId = 1;
-let rafPending = false; // requestAnimationFrame 节流
+let rafPending = false;
 
 function requestDraw(skipListUpdate) {
   if (rafPending) return;
@@ -463,58 +467,62 @@ resizeInteractiveCanvas();
 window.addEventListener('resize', resizeInteractiveCanvas);
 
 function createLine(x, y) {
-  return { id: nextId++, x1: x, y1: y, x2: x + 120, y2: y, length: 120, fixed: false };
+  return { id: nextId++, kind: 'line', x1: x, y1: y, x2: x + 120, y2: y, length: 120, fixed: false };
 }
 
-// 获取所有端点（含吸附后的实际位置）
-function getEndpoints() {
+function createAngle(x, y) {
+  return { id: nextId++, kind: 'angle', x: x, y: y, angle: 60, hLength: 100, fLength: 100 };
+}
+
+// 获取角的两个端点坐标
+function getAngleEndpoints(el) {
+  return {
+    hEnd: { x: el.x + el.hLength, y: el.y },
+    fEnd: { x: el.x + Math.cos(el.angle * Math.PI / 180) * el.fLength, y: el.y - Math.sin(el.angle * Math.PI / 180) * el.fLength }
+  };
+}
+
+// 获取角的类型标签
+function getAngleType(angle) {
+  if (Math.abs(angle - 180) < 0.5) return { label: '平角', color: '#6b7280' };
+  if (Math.abs(angle - 90) < 0.5) return { label: '直角', color: '#3b82f6' };
+  if (angle < 90) return { label: '锐角', color: '#10b981' };
+  return { label: '钝角', color: '#f59e0b' };
+}
+
+// 获取所有元素的端点
+function getAllEndpoints() {
   const pts = [];
-  lines.forEach(line => {
-    pts.push({ x: line.x1, y: line.y1, line, idx: 0 });
-    pts.push({ x: line.x2, y: line.y2, line, idx: 1 });
+  elements.forEach(el => {
+    if (el.kind === 'line') {
+      pts.push({ x: el.x1, y: el.y1, el, idx: 0 });
+      pts.push({ x: el.x2, y: el.y2, el, idx: 1 });
+    } else {
+      const ep = getAngleEndpoints(el);
+      pts.push({ x: el.x, y: el.y, el, idx: 0 }); // 顶点
+      pts.push({ x: ep.hEnd.x, y: ep.hEnd.y, el, idx: 1 }); // 水平端点
+      pts.push({ x: ep.fEnd.x, y: ep.fEnd.y, el, idx: 2 }); // 自由端点
+    }
   });
   return pts;
 }
 
-// 获取吸附后的端点坐标（多个端点吸附在一起时返回同一坐标）
+// 合并吸附点
 function getSnappedEndpoints() {
-  const pts = [];
-  lines.forEach(line => {
-    pts.push({ x: line.x1, y: line.y1, line, idx: 0 });
-    pts.push({ x: line.x2, y: line.y2, line, idx: 1 });
-  });
-  // 合并吸附点
+  const pts = getAllEndpoints();
   const merged = [];
   pts.forEach(p => {
     let found = false;
     for (const m of merged) {
       if (Math.hypot(p.x - m.x, p.y - m.y) < SNAP_DIST * 0.5) {
-        m.lines.push(p);
+        m.els.push(p);
         found = true;
         break;
       }
     }
-    if (!found) merged.push({ x: p.x, y: p.y, lines: [p] });
+    if (!found) merged.push({ x: p.x, y: p.y, els: [p] });
   });
   return { raw: pts, merged };
-}
-
-// 计算两条线段在某公共端点处的夹角
-function computeAngle(lineA, lineB, vertexX, vertexY) {
-  // 找到每条线段从顶点出发的方向
-  const dirs = [];
-  [lineA, lineB].forEach(line => {
-    let dx, dy;
-    if (Math.hypot(line.x1 - vertexX, line.y1 - vertexY) < SNAP_DIST) {
-      dx = line.x2 - vertexX; dy = line.y2 - vertexY;
-    } else {
-      dx = line.x1 - vertexX; dy = line.y1 - vertexY;
-    }
-    dirs.push(Math.atan2(dy, dx));
-  });
-  let angle = Math.abs(dirs[0] - dirs[1]) * 180 / Math.PI;
-  if (angle > 180) angle = 360 - angle;
-  return Math.round(angle * 10) / 10;
 }
 
 function drawInteractive(skipListUpdate) {
@@ -522,7 +530,7 @@ function drawInteractive(skipListUpdate) {
   const h = iCanvas.height / devicePixelRatio;
   iCtx.clearRect(0, 0, w, h);
 
-  // 网格（合并为单一路径，减少绘制调用）
+  // 网格
   iCtx.strokeStyle = '#f1f5f9';
   iCtx.lineWidth = 1;
   iCtx.beginPath();
@@ -532,8 +540,8 @@ function drawInteractive(skipListUpdate) {
 
   const { merged } = getSnappedEndpoints();
 
-  // 先绘制所有线段
-  lines.forEach(line => {
+  // 绘制线段
+  elements.filter(e => e.kind === 'line').forEach(line => {
     const isSelected = selectedEl && selectedEl.id === line.id;
     const color = line.fixed ? '#9ca3af' : (isSelected ? '#4f46e5' : '#64748b');
     const lw = isSelected ? 3 : 2;
@@ -547,51 +555,117 @@ function drawInteractive(skipListUpdate) {
     iCtx.stroke();
     iCtx.setLineDash([]);
 
-    // 长度标签
     const mx = (line.x1 + line.x2) / 2, my = (line.y1 + line.y2) / 2;
     iCtx.font = 'bold 12px sans-serif';
     iCtx.fillStyle = line.fixed ? '#9ca3af' : '#4f46e5';
     iCtx.fillText(`${line.length.toFixed(0)}px`, mx + 8, my - 8);
-
-    // 固定图标
-    if (line.fixed) {
-      iCtx.font = '14px sans-serif';
-      iCtx.fillText('🔒', mx - 8, my + 16);
-    }
   });
 
-  // 在吸附点处绘制夹角弧线和角度值
+  // 绘制角元素
+  elements.filter(e => e.kind === 'angle').forEach(el => {
+    const isSelected = selectedEl && selectedEl.id === el.id;
+    const color = isSelected ? '#d97706' : '#b45309';
+    const lw = isSelected ? 3 : 2;
+    const ep = getAngleEndpoints(el);
+    const type = getAngleType(el.angle);
+
+    // 水平边
+    iCtx.beginPath();
+    iCtx.moveTo(el.x, el.y);
+    iCtx.lineTo(ep.hEnd.x, ep.hEnd.y);
+    iCtx.strokeStyle = color;
+    iCtx.lineWidth = lw;
+    iCtx.stroke();
+
+    // 自由边
+    iCtx.beginPath();
+    iCtx.moveTo(el.x, el.y);
+    iCtx.lineTo(ep.fEnd.x, ep.fEnd.y);
+    iCtx.strokeStyle = color;
+    iCtx.lineWidth = lw;
+    iCtx.stroke();
+
+    // 弧线
+    const arcR = 22;
+    iCtx.beginPath();
+    const startA = 0;
+    const endA = -el.angle * Math.PI / 180;
+    iCtx.arc(el.x, el.y, arcR, endA, startA);
+    iCtx.strokeStyle = '#f59e0b';
+    iCtx.lineWidth = 2;
+    iCtx.stroke();
+
+    // 角度标签
+    const midA = -el.angle * Math.PI / 360;
+    const labelR = arcR + 16;
+    const lx = el.x + Math.cos(midA) * labelR;
+    const ly = el.y + Math.sin(midA) * labelR;
+    iCtx.font = 'bold 12px sans-serif';
+    iCtx.fillStyle = '#f59e0b';
+    iCtx.textAlign = 'center';
+    iCtx.textBaseline = 'middle';
+    iCtx.fillText(`${el.angle.toFixed(1)}°`, lx, ly);
+
+    // 类型标签
+    iCtx.font = '11px sans-serif';
+    iCtx.fillStyle = type.color;
+    iCtx.fillText(type.label, lx, ly + 16);
+    iCtx.textAlign = 'start';
+    iCtx.textBaseline = 'alphabetic';
+
+    // 长度标签
+    const hmx = (el.x + ep.hEnd.x) / 2, hmy = (el.y + ep.hEnd.y) / 2;
+    iCtx.font = 'bold 11px sans-serif';
+    iCtx.fillStyle = color;
+    iCtx.fillText(`${el.hLength.toFixed(0)}px`, hmx, hmy - 10);
+
+    const fmx = (el.x + ep.fEnd.x) / 2, fmy = (el.y + ep.fEnd.y) / 2;
+    iCtx.fillText(`${el.fLength.toFixed(0)}px`, fmx + 8, fmy - 8);
+  });
+
+  // 吸附点夹角
   merged.forEach(m => {
-    if (m.lines.length < 2) return;
-    // 找出所有不同的线段
-    const uniqueLines = [...new Set(m.lines.map(p => p.line))];
-    if (uniqueLines.length < 2) return;
+    if (m.els.length < 2) return;
+    const uniqueEls = [...new Set(m.els.map(p => p.el))];
+    if (uniqueEls.length < 2) return;
 
     const vx = m.x, vy = m.y;
+    const dirs = [];
 
-    // 计算所有方向
-    const dirs = uniqueLines.map(line => {
-      let dx, dy;
-      if (Math.hypot(line.x1 - vx, line.y1 - vy) < SNAP_DIST) {
-        dx = line.x2 - vx; dy = line.y2 - vy;
+    uniqueEls.forEach(el => {
+      if (el.kind === 'line') {
+        let dx, dy;
+        if (Math.hypot(el.x1 - vx, el.y1 - vy) < SNAP_DIST) {
+          dx = el.x2 - vx; dy = el.y2 - vy;
+        } else {
+          dx = el.x1 - vx; dy = el.y1 - vy;
+        }
+        dirs.push(Math.atan2(dy, dx));
       } else {
-        dx = line.x1 - vx; dy = line.y1 - vy;
+        if (Math.hypot(el.x - vx, el.y - vy) < SNAP_DIST) {
+          dirs.push(0);
+          dirs.push(-el.angle * Math.PI / 180);
+        } else {
+          const ep = getAngleEndpoints(el);
+          if (Math.hypot(ep.hEnd.x - vx, ep.hEnd.y - vy) < SNAP_DIST) {
+            dirs.push(Math.atan2(el.y - ep.hEnd.y, el.x - ep.hEnd.x));
+          } else if (Math.hypot(ep.fEnd.x - vx, ep.fEnd.y - vy) < SNAP_DIST) {
+            dirs.push(Math.atan2(el.y - ep.fEnd.y, el.x - ep.fEnd.x));
+          }
+        }
       }
-      return Math.atan2(dy, dx);
     });
 
-    // 对每对相邻线段绘制夹角
-    const n = dirs.length;
-    // 排序方向
+    if (dirs.length < 2) return;
     const sortedDirs = dirs.slice().sort((a, b) => a - b);
+    const n = sortedDirs.length;
 
-    // 绘制相邻夹角（只画小于180°的角，避免补角重复显示）
     for (let i = 0; i < n; i++) {
       const a1 = sortedDirs[i];
       const a2 = sortedDirs[(i + 1) % n];
       let angle = (a2 - a1) * 180 / Math.PI;
       if (angle < 0) angle += 360;
-      if (angle >= 180) continue; // 跳过补角
+      if (angle >= 180) continue;
 
       const arcR = 30 + i * 8;
       iCtx.beginPath();
@@ -606,7 +680,6 @@ function drawInteractive(skipListUpdate) {
       iCtx.lineWidth = 2;
       iCtx.stroke();
 
-      // 用向量法计算角平分线方向，确保标签始终在弧线内侧
       const cos1 = Math.cos(a1), sin1 = Math.sin(a1);
       const cos2 = Math.cos(a2), sin2 = Math.sin(a2);
       const bisX = cos1 + cos2, bisY = sin1 + sin2;
@@ -624,10 +697,10 @@ function drawInteractive(skipListUpdate) {
     }
   });
 
-  // 绘制端点（在夹角之上）
+  // 绘制端点
   merged.forEach(m => {
-    const isAnySelected = m.lines.some(p => selectedEl && selectedEl.id === p.line.id);
-    const hasMultiple = m.lines.length >= 2;
+    const isAnySelected = m.els.some(p => selectedEl && selectedEl.id === p.el.id);
+    const hasMultiple = m.els.length >= 2;
     iCtx.beginPath();
     iCtx.arc(m.x, m.y, hasMultiple ? 8 : 6, 0, Math.PI * 2);
     iCtx.fillStyle = hasMultiple ? '#f59e0b' : (isAnySelected ? '#4f46e5' : '#94a3b8');
@@ -642,24 +715,32 @@ function drawInteractive(skipListUpdate) {
 
 function updateElementList() {
   const list = document.getElementById('elementList');
-  if (lines.length === 0) {
+  if (elements.length === 0) {
     list.innerHTML = '<div class="hint">画布为空，请添加元素</div>';
     return;
   }
-  list.innerHTML = lines.map(line => {
-    const isSelected = selectedEl && selectedEl.id === line.id;
-    const lockIcon = line.fixed ? ' 🔒' : '';
-    return `<div class="element-list-item" style="${isSelected ? 'border:1.5px solid var(--primary);' : ''}" data-id="${line.id}">
-      <span>线段 #${line.id} (${line.length.toFixed(0)}px)${lockIcon}</span>
-      <button class="del-btn" data-del="${line.id}">✕</button>
-    </div>`;
+  list.innerHTML = elements.map(el => {
+    const isSelected = selectedEl && selectedEl.id === el.id;
+    if (el.kind === 'line') {
+      const lockIcon = el.fixed ? ' 🔒' : '';
+      return `<div class="element-list-item" style="${isSelected ? 'border:1.5px solid var(--primary);' : ''}" data-id="${el.id}">
+        <span>线段 #${el.id} (${el.length.toFixed(0)}px)${lockIcon}</span>
+        <button class="del-btn" data-del="${el.id}">✕</button>
+      </div>`;
+    } else {
+      const type = getAngleType(el.angle);
+      return `<div class="element-list-item" style="${isSelected ? 'border:1.5px solid var(--primary);' : ''}" data-id="${el.id}">
+        <span>角 #${el.id} (${el.angle.toFixed(1)}° ${type.label})</span>
+        <button class="del-btn" data-del="${el.id}">✕</button>
+      </div>`;
+    }
   }).join('');
 
   list.querySelectorAll('[data-del]').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       const id = parseInt(btn.dataset.del);
-      lines = lines.filter(l => l.id !== id);
+      elements = elements.filter(l => l.id !== id);
       if (selectedEl && selectedEl.id === id) { selectedEl = null; hideProps(); }
       drawInteractive();
     });
@@ -668,7 +749,7 @@ function updateElementList() {
   list.querySelectorAll('[data-id]').forEach(item => {
     item.addEventListener('click', () => {
       const id = parseInt(item.dataset.id);
-      selectedEl = lines.find(l => l.id === id);
+      selectedEl = elements.find(l => l.id === id);
       showProps(selectedEl);
       drawInteractive();
     });
@@ -680,7 +761,18 @@ document.getElementById('addLine').addEventListener('click', () => {
   const w = iCanvas.width / devicePixelRatio;
   const h = iCanvas.height / devicePixelRatio;
   const el = createLine(w / 2 - 60 + Math.random() * 40, h / 2 - 20 + Math.random() * 40);
-  lines.push(el);
+  elements.push(el);
+  selectedEl = el;
+  showProps(el);
+  drawInteractive();
+});
+
+// 添加角
+document.getElementById('addAngle').addEventListener('click', () => {
+  const w = iCanvas.width / devicePixelRatio;
+  const h = iCanvas.height / devicePixelRatio;
+  const el = createAngle(w / 2 - 50 + Math.random() * 40, h / 2 + Math.random() * 40);
+  elements.push(el);
   selectedEl = el;
   showProps(el);
   drawInteractive();
@@ -693,46 +785,48 @@ function getMousePos(e) {
 }
 
 function hitTest(pos) {
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i];
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const el = elements[i];
 
-    const pts = [{ x: line.x1, y: line.y1, idx: 0 }, { x: line.x2, y: line.y2, idx: 1 }];
-    for (const p of pts) {
-      if (Math.hypot(pos.x - p.x, pos.y - p.y) < 12) {
-        // 找到所有共享该端点的线段（排除固定线段，它们不可被拖拽）
-        const shared = lines.filter(l => {
-          if (l.id === line.id) return true;
-          if (l.fixed) return false;
-          return Math.hypot(l.x1 - p.x, l.y1 - p.y) < SNAP_DIST ||
-                 Math.hypot(l.x2 - p.x, l.y2 - p.y) < SNAP_DIST;
-        }).map(l => ({
-          line: l,
-          pointIdx: (Math.hypot(l.x1 - p.x, l.y1 - p.y) < SNAP_DIST) ? 0 : 1
-        }));
-        return { line, pointIndex: p.idx, sharedLines: shared };
+    if (el.kind === 'line') {
+      const pts = [{ x: el.x1, y: el.y1, idx: 0 }, { x: el.x2, y: el.y2, idx: 1 }];
+      for (const p of pts) {
+        if (Math.hypot(pos.x - p.x, pos.y - p.y) < 12) {
+          const shared = elements.filter(l => {
+            if (l.id === el.id) return true;
+            if (l.kind === 'line' && l.fixed) return false;
+            return Math.hypot(l.x1 - p.x, l.y1 - p.y) < SNAP_DIST ||
+                   Math.hypot(l.x2 - p.x, l.y2 - p.y) < SNAP_DIST;
+          }).map(l => ({
+            el: l,
+            pointIdx: (Math.hypot(l.x1 - p.x, l.y1 - p.y) < SNAP_DIST) ? 0 : 1
+          }));
+          return { el, pointIndex: p.idx, sharedEls: shared };
+        }
+      }
+      if (el.fixed) continue;
+      const dx = el.x2 - el.x1, dy = el.y2 - el.y1;
+      const len = Math.hypot(dx, dy);
+      if (len === 0) continue;
+      const t = Math.max(0, Math.min(1, ((pos.x - el.x1) * dx + (pos.y - el.y1) * dy) / (len * len)));
+      const px = el.x1 + t * dx, py = el.y1 + t * dy;
+      if (Math.hypot(pos.x - px, pos.y - py) < 8) return { el, pointIndex: -1, sharedEls: [{ el, pointIdx: -1 }] };
+    } else {
+      const ep = getAngleEndpoints(el);
+      // 优先检测自由端点，避免与水平端点重叠时无法调节角度
+      const pts = [
+        { x: ep.fEnd.x, y: ep.fEnd.y, idx: 2 },
+        { x: el.x, y: el.y, idx: 0 },
+        { x: ep.hEnd.x, y: ep.hEnd.y, idx: 1 }
+      ];
+      for (const p of pts) {
+        if (Math.hypot(pos.x - p.x, pos.y - p.y) < 12) {
+          return { el, pointIndex: p.idx, sharedEls: [{ el, pointIdx: p.idx }] };
+        }
       }
     }
-    // 线段主体：固定线段不可拖拽主体
-    if (line.fixed) continue;
-    const dx = line.x2 - line.x1, dy = line.y2 - line.y1;
-    const len = Math.hypot(dx, dy);
-    if (len === 0) continue;
-    const t = Math.max(0, Math.min(1, ((pos.x - line.x1) * dx + (pos.y - line.y1) * dy) / (len * len)));
-    const px = line.x1 + t * dx, py = line.y1 + t * dy;
-    if (Math.hypot(pos.x - px, pos.y - py) < 8) return { line, pointIndex: -1, sharedLines: [{ line, pointIdx: -1 }] };
   }
   return null;
-}
-
-function snapPoint(x, y, excludeLine) {
-  let sx = x, sy = y, snapped = false;
-  lines.forEach(line => {
-    if (line.id === excludeLine.id) return;
-    [{ x: line.x1, y: line.y1 }, { x: line.x2, y: line.y2 }].forEach(p => {
-      if (Math.hypot(x - p.x, y - p.y) < SNAP_DIST) { sx = p.x; sy = p.y; snapped = true; }
-    });
-  });
-  return { x: sx, y: sy, snapped };
 }
 
 iCanvas.addEventListener('mousedown', e => {
@@ -740,8 +834,8 @@ iCanvas.addEventListener('mousedown', e => {
   const hit = hitTest(pos);
   if (hit) {
     dragging = hit;
-    selectedEl = hit.line;
-    showProps(hit.line);
+    selectedEl = hit.el;
+    showProps(hit.el);
     drawInteractive();
   } else {
     selectedEl = null;
@@ -758,64 +852,91 @@ iCanvas.addEventListener('mousemove', e => {
     return;
   }
   iCanvas.style.cursor = 'grabbing';
-  const line = dragging.line;
+  const el = dragging.el;
 
-  // 获取所有共享线段的 ID，用于排除吸附检查
-  const shared = dragging.sharedLines || [{ line, pointIdx: dragging.pointIndex }];
-  const excludeIds = new Set(shared.map(s => s.line.id));
+  const shared = dragging.sharedEls || [{ el, pointIdx: dragging.pointIndex }];
+  const excludeIds = new Set(shared.map(s => s.el.id));
 
-  // 检查是否吸附到其他非共享线段的端点
   let fx = pos.x, fy = pos.y, snapped = false;
-  lines.forEach(l => {
-    if (excludeIds.has(l.id)) return;
-    [{ x: l.x1, y: l.y1 }, { x: l.x2, y: l.y2 }].forEach(p => {
+  elements.forEach(other => {
+    if (excludeIds.has(other.id)) return;
+    let otherPts = [];
+    if (other.kind === 'line') {
+      otherPts = [{ x: other.x1, y: other.y1 }, { x: other.x2, y: other.y2 }];
+    } else {
+      const ep = getAngleEndpoints(other);
+      otherPts = [{ x: other.x, y: other.y }, { x: ep.hEnd.x, y: ep.hEnd.y }, { x: ep.fEnd.x, y: ep.fEnd.y }];
+    }
+    otherPts.forEach(p => {
       if (Math.hypot(pos.x - p.x, pos.y - p.y) < SNAP_DIST) { fx = p.x; fy = p.y; snapped = true; }
     });
   });
 
   showSnap(snapped);
 
-  if (dragging.pointIndex === -1) {
-    // 拖拽线段主体：只移动当前线段
-    const dx = pos.x - (line.x1 + line.x2) / 2;
-    const dy = pos.y - (line.y1 + line.y2) / 2;
-    line.x1 += dx; line.y1 += dy; line.x2 += dx; line.y2 += dy;
-    line.length = Math.hypot(line.x2 - line.x1, line.y2 - line.y1);
-  } else {
-    // 固定线段：端点只能沿线段方向滑动（改变长度，不改变角度和另一端位置）
-    if (line.fixed) {
-      const dx = line.x2 - line.x1, dy = line.y2 - line.y1;
-      const len = Math.hypot(dx, dy);
-      if (len > 0) {
-        let ux = dx / len, uy = dy / len;
-        const anchorX = dragging.pointIndex === 0 ? line.x2 : line.x1;
-        const anchorY = dragging.pointIndex === 0 ? line.y2 : line.y1;
-        const t = (pos.x - anchorX) * ux + (pos.y - anchorY) * uy;
-        // t 为负时翻转方向，避免闪烁
-        let dirX = ux, dirY = uy;
-        let absT = t;
-        if (t < 0) { dirX = -ux; dirY = -uy; absT = -t; }
-        const newLen = Math.max(20, Math.min(400, absT));
-        if (dragging.pointIndex === 0) {
-          line.x1 = anchorX + dirX * newLen;
-          line.y1 = anchorY + dirY * newLen;
-        } else {
-          line.x2 = anchorX + dirX * newLen;
-          line.y2 = anchorY + dirY * newLen;
-        }
-        line.length = newLen;
-      }
+  if (el.kind === 'line') {
+    if (dragging.pointIndex === -1) {
+      const dx = pos.x - (el.x1 + el.x2) / 2;
+      const dy = pos.y - (el.y1 + el.y2) / 2;
+      el.x1 += dx; el.y1 += dy; el.x2 += dx; el.y2 += dy;
+      el.length = Math.hypot(el.x2 - el.x1, el.y2 - el.y1);
     } else {
-      // 非固定线段：所有共享端点的线段同步移动
-      shared.forEach(s => {
-        if (s.pointIdx === 0) { s.line.x1 = fx; s.line.y1 = fy; }
-        else if (s.pointIdx === 1) { s.line.x2 = fx; s.line.y2 = fy; }
-        s.line.length = Math.hypot(s.line.x2 - s.line.x1, s.line.y2 - s.line.y1);
-      });
+      if (el.fixed) {
+        const dx = el.x2 - el.x1, dy = el.y2 - el.y1;
+        const len = Math.hypot(dx, dy);
+        if (len > 0) {
+          let ux = dx / len, uy = dy / len;
+          const anchorX = dragging.pointIndex === 0 ? el.x2 : el.x1;
+          const anchorY = dragging.pointIndex === 0 ? el.y2 : el.y1;
+          const t = (pos.x - anchorX) * ux + (pos.y - anchorY) * uy;
+          let dirX = ux, dirY = uy;
+          let absT = t;
+          if (t < 0) { dirX = -ux; dirY = -uy; absT = -t; }
+          const newLen = Math.max(20, Math.min(400, absT));
+          if (dragging.pointIndex === 0) {
+            el.x1 = anchorX + dirX * newLen; el.y1 = anchorY + dirY * newLen;
+          } else {
+            el.x2 = anchorX + dirX * newLen; el.y2 = anchorY + dirY * newLen;
+          }
+          el.length = newLen;
+        }
+      } else {
+        shared.forEach(s => {
+          if (s.pointIdx === 0) { s.el.x1 = fx; s.el.y1 = fy; }
+          else if (s.pointIdx === 1) { s.el.x2 = fx; s.el.y2 = fy; }
+          s.el.length = Math.hypot(s.el.x2 - s.el.x1, s.el.y2 - s.el.y1);
+        });
+      }
+    }
+  } else {
+    // 角元素拖拽
+    if (dragging.pointIndex === 0) {
+      // 拖拽顶点：整体移动
+      const dx = pos.x - el.x, dy = pos.y - el.y;
+      el.x += dx; el.y += dy;
+    } else if (dragging.pointIndex === 1) {
+      // 拖拽水平端点：只改变水平边长度
+      const newLen = Math.max(20, Math.min(400, pos.x - el.x));
+      el.hLength = newLen;
+    } else if (dragging.pointIndex === 2) {
+      // 拖拽自由端点：改变角度和长度
+      const dx = pos.x - el.x, dy = el.y - pos.y;
+      let newAngle;
+      if (dy < 0) {
+        // 鼠标在水平线下方：右侧钳制到0°，左侧钳制到180°
+        newAngle = dx >= 0 ? 0 : 180;
+      } else {
+        newAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+        newAngle = Math.max(0, Math.min(180, newAngle));
+      }
+      // 接近90°时自动吸附
+      if (Math.abs(newAngle - 90) < 1) newAngle = 90;
+      el.angle = newAngle;
+      const newLen = Math.max(20, Math.min(400, Math.hypot(dx, dy)));
+      el.fLength = newLen;
     }
   }
 
-  // 拖拽过程中只重绘canvas，不操作DOM
   requestDraw(true);
 });
 
@@ -841,43 +962,105 @@ function showProps(el) {
   const content = document.getElementById('propsContent');
   panel.classList.add('visible');
 
-  title.textContent = `线段 #${el.id}`;
-  content.innerHTML = `
-    <div class="prop-row">
-      <div class="prop-label">长度: <strong id="lenVal">${el.length.toFixed(0)}</strong> px</div>
-      <input type="range" class="prop-slider" id="lenSlider" min="20" max="400" value="${el.length.toFixed(0)}" ${el.fixed ? 'disabled' : ''}>
-      <input type="number" class="prop-input" id="lenInput" min="20" max="400" value="${el.length.toFixed(0)}" style="margin-top:6px;" ${el.fixed ? 'disabled' : ''}>
-    </div>
-    <div class="prop-row">
-      <button class="btn ${el.fixed ? 'btn-outline' : 'btn-primary'} btn-sm" id="btnToggleFixed" style="width:100%;justify-content:center;">
-        ${el.fixed ? '🔓 解锁' : '🔒 固定'}
-      </button>
-    </div>
-  `;
-  const slider = document.getElementById('lenSlider');
-  const input = document.getElementById('lenInput');
-  const val = document.getElementById('lenVal');
-  const updateLen = v => {
-    if (el.fixed) return;
-    v = Math.max(20, Math.min(400, parseFloat(v) || 20));
-    const dx = el.x2 - el.x1, dy = el.y2 - el.y1;
-    const curLen = Math.hypot(dx, dy);
-    if (curLen === 0) return;
-    const ratio = v / curLen;
-    el.x2 = el.x1 + dx * ratio;
-    el.y2 = el.y1 + dy * ratio;
-    el.length = v;
-    slider.value = v; input.value = v; val.textContent = v.toFixed(0);
-    drawInteractive();
-  };
-  slider.addEventListener('input', e => updateLen(e.target.value));
-  input.addEventListener('change', e => updateLen(e.target.value));
+  if (el.kind === 'line') {
+    title.textContent = `线段 #${el.id}`;
+    content.innerHTML = `
+      <div class="prop-row">
+        <div class="prop-label">长度: <strong id="lenVal">${el.length.toFixed(0)}</strong> px</div>
+        <input type="range" class="prop-slider" id="lenSlider" min="20" max="400" value="${el.length.toFixed(0)}" ${el.fixed ? 'disabled' : ''}>
+        <input type="number" class="prop-input" id="lenInput" min="20" max="400" value="${el.length.toFixed(0)}" style="margin-top:6px;" ${el.fixed ? 'disabled' : ''}>
+      </div>
+      <div class="prop-row">
+        <button class="btn ${el.fixed ? 'btn-outline' : 'btn-primary'} btn-sm" id="btnToggleFixed" style="width:100%;justify-content:center;">
+          ${el.fixed ? '🔓 解锁' : '🔒 固定'}
+        </button>
+      </div>
+    `;
+    const slider = document.getElementById('lenSlider');
+    const input = document.getElementById('lenInput');
+    const val = document.getElementById('lenVal');
+    const updateLen = v => {
+      if (el.fixed) return;
+      v = Math.max(20, Math.min(400, parseFloat(v) || 20));
+      const dx = el.x2 - el.x1, dy = el.y2 - el.y1;
+      const curLen = Math.hypot(dx, dy);
+      if (curLen === 0) return;
+      const ratio = v / curLen;
+      el.x2 = el.x1 + dx * ratio;
+      el.y2 = el.y1 + dy * ratio;
+      el.length = v;
+      slider.value = v; input.value = v; val.textContent = v.toFixed(0);
+      drawInteractive();
+    };
+    slider.addEventListener('input', e => updateLen(e.target.value));
+    input.addEventListener('change', e => updateLen(e.target.value));
 
-  document.getElementById('btnToggleFixed').addEventListener('click', () => {
-    el.fixed = !el.fixed;
-    showProps(el);
-    drawInteractive();
-  });
+    document.getElementById('btnToggleFixed').addEventListener('click', () => {
+      el.fixed = !el.fixed;
+      showProps(el);
+      drawInteractive();
+    });
+  } else {
+    const type = getAngleType(el.angle);
+    title.textContent = `角 #${el.id}`;
+    content.innerHTML = `
+      <div class="prop-row">
+        <div class="prop-label">角度: <strong id="angleVal">${el.angle.toFixed(1)}</strong>° <span style="color:${type.color};font-size:12px;">(${type.label})</span></div>
+        <input type="range" class="prop-slider" id="angleSlider" min="0" max="180" step="0.5" value="${el.angle}">
+        <input type="number" class="prop-input" id="angleInput" min="0" max="180" step="0.5" value="${el.angle.toFixed(1)}" style="margin-top:6px;">
+      </div>
+      <div class="prop-row">
+        <div class="prop-label">水平边长度: <strong id="hLenVal">${el.hLength.toFixed(0)}</strong> px</div>
+        <input type="range" class="prop-slider" id="hLenSlider" min="20" max="400" value="${el.hLength.toFixed(0)}">
+        <input type="number" class="prop-input" id="hLenInput" min="20" max="400" value="${el.hLength.toFixed(0)}" style="margin-top:6px;">
+      </div>
+      <div class="prop-row">
+        <div class="prop-label">自由边长度: <strong id="fLenVal">${el.fLength.toFixed(0)}</strong> px</div>
+        <input type="range" class="prop-slider" id="fLenSlider" min="20" max="400" value="${el.fLength.toFixed(0)}">
+        <input type="number" class="prop-input" id="fLenInput" min="20" max="400" value="${el.fLength.toFixed(0)}" style="margin-top:6px;">
+      </div>
+    `;
+
+    const angleSlider = document.getElementById('angleSlider');
+    const angleInput = document.getElementById('angleInput');
+    const angleVal = document.getElementById('angleVal');
+    const updateAngle = v => {
+      v = Math.max(0, Math.min(180, parseFloat(v) || 0));
+      el.angle = v;
+      const t = getAngleType(v);
+      angleVal.textContent = v.toFixed(1);
+      angleVal.parentElement.querySelector('span').textContent = `(${t.label})`;
+      angleVal.parentElement.querySelector('span').style.color = t.color;
+      angleSlider.value = v; angleInput.value = v.toFixed(1);
+      drawInteractive();
+    };
+    angleSlider.addEventListener('input', e => updateAngle(e.target.value));
+    angleInput.addEventListener('change', e => updateAngle(e.target.value));
+
+    const hSlider = document.getElementById('hLenSlider');
+    const hInput = document.getElementById('hLenInput');
+    const hVal = document.getElementById('hLenVal');
+    const updateHLen = v => {
+      v = Math.max(20, Math.min(400, parseFloat(v) || 20));
+      el.hLength = v;
+      hSlider.value = v; hInput.value = v.toFixed(0); hVal.textContent = v.toFixed(0);
+      drawInteractive();
+    };
+    hSlider.addEventListener('input', e => updateHLen(e.target.value));
+    hInput.addEventListener('change', e => updateHLen(e.target.value));
+
+    const fSlider = document.getElementById('fLenSlider');
+    const fInput = document.getElementById('fLenInput');
+    const fVal = document.getElementById('fLenVal');
+    const updateFLen = v => {
+      v = Math.max(20, Math.min(400, parseFloat(v) || 20));
+      el.fLength = v;
+      fSlider.value = v; fInput.value = v.toFixed(0); fVal.textContent = v.toFixed(0);
+      drawInteractive();
+    };
+    fSlider.addEventListener('input', e => updateFLen(e.target.value));
+    fInput.addEventListener('change', e => updateFLen(e.target.value));
+  }
 }
 
 function hideProps() {
@@ -886,7 +1069,7 @@ function hideProps() {
 
 document.getElementById('propsDelete').addEventListener('click', () => {
   if (selectedEl) {
-    lines = lines.filter(l => l.id !== selectedEl.id);
+    elements = elements.filter(l => l.id !== selectedEl.id);
     selectedEl = null;
     hideProps();
     drawInteractive();

@@ -606,10 +606,14 @@ function drawInteractive(skipListUpdate) {
       iCtx.lineWidth = 2;
       iCtx.stroke();
 
-      const midA = (drawA1 + drawA2) / 2;
+      // 用向量法计算角平分线方向，确保标签始终在弧线内侧
+      const cos1 = Math.cos(a1), sin1 = Math.sin(a1);
+      const cos2 = Math.cos(a2), sin2 = Math.sin(a2);
+      const bisX = cos1 + cos2, bisY = sin1 + sin2;
+      const bisLen = Math.hypot(bisX, bisY);
       const labelR = arcR + 18;
-      const lx = vx + Math.cos(midA) * labelR;
-      const ly = vy + Math.sin(midA) * labelR;
+      const lx = vx + (bisX / bisLen) * labelR;
+      const ly = vy + (bisY / bisLen) * labelR;
       iCtx.font = 'bold 12px sans-serif';
       iCtx.fillStyle = '#f59e0b';
       iCtx.textAlign = 'center';
@@ -691,8 +695,6 @@ function getMousePos(e) {
 function hitTest(pos) {
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
-    // 固定线段不可被拖拽，但仍可被吸附
-    if (line.fixed) continue;
 
     const pts = [{ x: line.x1, y: line.y1, idx: 0 }, { x: line.x2, y: line.y2, idx: 1 }];
     for (const p of pts) {
@@ -705,13 +707,13 @@ function hitTest(pos) {
                  Math.hypot(l.x2 - p.x, l.y2 - p.y) < SNAP_DIST;
         }).map(l => ({
           line: l,
-          // 记录该线段哪个端点是共享点（0=x1/y1, 1=x2/y2）
           pointIdx: (Math.hypot(l.x1 - p.x, l.y1 - p.y) < SNAP_DIST) ? 0 : 1
         }));
         return { line, pointIndex: p.idx, sharedLines: shared };
       }
     }
-    // 线段主体
+    // 线段主体：固定线段不可拖拽主体
+    if (line.fixed) continue;
     const dx = line.x2 - line.x1, dy = line.y2 - line.y1;
     const len = Math.hypot(dx, dy);
     if (len === 0) continue;
@@ -780,12 +782,37 @@ iCanvas.addEventListener('mousemove', e => {
     line.x1 += dx; line.y1 += dy; line.x2 += dx; line.y2 += dy;
     line.length = Math.hypot(line.x2 - line.x1, line.y2 - line.y1);
   } else {
-    // 拖拽端点：所有共享该端点的线段同步移动
-    shared.forEach(s => {
-      if (s.pointIdx === 0) { s.line.x1 = fx; s.line.y1 = fy; }
-      else if (s.pointIdx === 1) { s.line.x2 = fx; s.line.y2 = fy; }
-      s.line.length = Math.hypot(s.line.x2 - s.line.x1, s.line.y2 - s.line.y1);
-    });
+    // 固定线段：端点只能沿线段方向滑动（改变长度，不改变角度和另一端位置）
+    if (line.fixed) {
+      const dx = line.x2 - line.x1, dy = line.y2 - line.y1;
+      const len = Math.hypot(dx, dy);
+      if (len > 0) {
+        let ux = dx / len, uy = dy / len;
+        const anchorX = dragging.pointIndex === 0 ? line.x2 : line.x1;
+        const anchorY = dragging.pointIndex === 0 ? line.y2 : line.y1;
+        const t = (pos.x - anchorX) * ux + (pos.y - anchorY) * uy;
+        // t 为负时翻转方向，避免闪烁
+        let dirX = ux, dirY = uy;
+        let absT = t;
+        if (t < 0) { dirX = -ux; dirY = -uy; absT = -t; }
+        const newLen = Math.max(20, Math.min(400, absT));
+        if (dragging.pointIndex === 0) {
+          line.x1 = anchorX + dirX * newLen;
+          line.y1 = anchorY + dirY * newLen;
+        } else {
+          line.x2 = anchorX + dirX * newLen;
+          line.y2 = anchorY + dirY * newLen;
+        }
+        line.length = newLen;
+      }
+    } else {
+      // 非固定线段：所有共享端点的线段同步移动
+      shared.forEach(s => {
+        if (s.pointIdx === 0) { s.line.x1 = fx; s.line.y1 = fy; }
+        else if (s.pointIdx === 1) { s.line.x2 = fx; s.line.y2 = fy; }
+        s.line.length = Math.hypot(s.line.x2 - s.line.x1, s.line.y2 - s.line.y1);
+      });
+    }
   }
 
   // 拖拽过程中只重绘canvas，不操作DOM

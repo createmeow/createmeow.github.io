@@ -463,7 +463,7 @@ resizeInteractiveCanvas();
 window.addEventListener('resize', resizeInteractiveCanvas);
 
 function createLine(x, y) {
-  return { id: nextId++, x1: x, y1: y, x2: x + 120, y2: y, length: 120 };
+  return { id: nextId++, x1: x, y1: y, x2: x + 120, y2: y, length: 120, fixed: false };
 }
 
 // 获取所有端点（含吸附后的实际位置）
@@ -535,7 +535,7 @@ function drawInteractive(skipListUpdate) {
   // 先绘制所有线段
   lines.forEach(line => {
     const isSelected = selectedEl && selectedEl.id === line.id;
-    const color = isSelected ? '#4f46e5' : '#64748b';
+    const color = line.fixed ? '#9ca3af' : (isSelected ? '#4f46e5' : '#64748b');
     const lw = isSelected ? 3 : 2;
 
     iCtx.beginPath();
@@ -543,13 +543,21 @@ function drawInteractive(skipListUpdate) {
     iCtx.lineTo(line.x2, line.y2);
     iCtx.strokeStyle = color;
     iCtx.lineWidth = lw;
+    if (line.fixed) iCtx.setLineDash([6, 4]);
     iCtx.stroke();
+    iCtx.setLineDash([]);
 
     // 长度标签
     const mx = (line.x1 + line.x2) / 2, my = (line.y1 + line.y2) / 2;
     iCtx.font = 'bold 12px sans-serif';
-    iCtx.fillStyle = '#4f46e5';
+    iCtx.fillStyle = line.fixed ? '#9ca3af' : '#4f46e5';
     iCtx.fillText(`${line.length.toFixed(0)}px`, mx + 8, my - 8);
+
+    // 固定图标
+    if (line.fixed) {
+      iCtx.font = '14px sans-serif';
+      iCtx.fillText('🔒', mx - 8, my + 16);
+    }
   });
 
   // 在吸附点处绘制夹角弧线和角度值
@@ -636,8 +644,9 @@ function updateElementList() {
   }
   list.innerHTML = lines.map(line => {
     const isSelected = selectedEl && selectedEl.id === line.id;
+    const lockIcon = line.fixed ? ' 🔒' : '';
     return `<div class="element-list-item" style="${isSelected ? 'border:1.5px solid var(--primary);' : ''}" data-id="${line.id}">
-      <span>线段 #${line.id} (${line.length.toFixed(0)}px)</span>
+      <span>线段 #${line.id} (${line.length.toFixed(0)}px)${lockIcon}</span>
       <button class="del-btn" data-del="${line.id}">✕</button>
     </div>`;
   }).join('');
@@ -682,12 +691,16 @@ function getMousePos(e) {
 function hitTest(pos) {
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
+    // 固定线段不可被拖拽，但仍可被吸附
+    if (line.fixed) continue;
+
     const pts = [{ x: line.x1, y: line.y1, idx: 0 }, { x: line.x2, y: line.y2, idx: 1 }];
     for (const p of pts) {
       if (Math.hypot(pos.x - p.x, pos.y - p.y) < 12) {
-        // 找到所有共享该端点的线段，并记录各自的端点索引
+        // 找到所有共享该端点的线段（排除固定线段，它们不可被拖拽）
         const shared = lines.filter(l => {
           if (l.id === line.id) return true;
+          if (l.fixed) return false;
           return Math.hypot(l.x1 - p.x, l.y1 - p.y) < SNAP_DIST ||
                  Math.hypot(l.x2 - p.x, l.y2 - p.y) < SNAP_DIST;
         }).map(l => ({
@@ -805,14 +818,20 @@ function showProps(el) {
   content.innerHTML = `
     <div class="prop-row">
       <div class="prop-label">长度: <strong id="lenVal">${el.length.toFixed(0)}</strong> px</div>
-      <input type="range" class="prop-slider" id="lenSlider" min="20" max="400" value="${el.length.toFixed(0)}">
-      <input type="number" class="prop-input" id="lenInput" min="20" max="400" value="${el.length.toFixed(0)}" style="margin-top:6px;">
+      <input type="range" class="prop-slider" id="lenSlider" min="20" max="400" value="${el.length.toFixed(0)}" ${el.fixed ? 'disabled' : ''}>
+      <input type="number" class="prop-input" id="lenInput" min="20" max="400" value="${el.length.toFixed(0)}" style="margin-top:6px;" ${el.fixed ? 'disabled' : ''}>
+    </div>
+    <div class="prop-row">
+      <button class="btn ${el.fixed ? 'btn-outline' : 'btn-primary'} btn-sm" id="btnToggleFixed" style="width:100%;justify-content:center;">
+        ${el.fixed ? '🔓 解锁' : '🔒 固定'}
+      </button>
     </div>
   `;
   const slider = document.getElementById('lenSlider');
   const input = document.getElementById('lenInput');
   const val = document.getElementById('lenVal');
   const updateLen = v => {
+    if (el.fixed) return;
     v = Math.max(20, Math.min(400, parseFloat(v) || 20));
     const dx = el.x2 - el.x1, dy = el.y2 - el.y1;
     const curLen = Math.hypot(dx, dy);
@@ -826,6 +845,12 @@ function showProps(el) {
   };
   slider.addEventListener('input', e => updateLen(e.target.value));
   input.addEventListener('change', e => updateLen(e.target.value));
+
+  document.getElementById('btnToggleFixed').addEventListener('click', () => {
+    el.fixed = !el.fixed;
+    showProps(el);
+    drawInteractive();
+  });
 }
 
 function hideProps() {

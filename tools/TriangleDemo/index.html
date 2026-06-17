@@ -466,6 +466,16 @@ function resizeInteractiveCanvas() {
 resizeInteractiveCanvas();
 window.addEventListener('resize', resizeInteractiveCanvas);
 
+// 触摸设备检测
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const HIT_RADIUS = isTouchDevice ? 24 : 12;
+const LINE_HIT_RADIUS = isTouchDevice ? 16 : 8;
+
+function getTouchPos(e) {
+  const t = e.touches[0] || e.changedTouches[0];
+  return getMousePos(t);
+}
+
 function createLine(x, y) {
   return { id: nextId++, kind: 'line', x1: x, y1: y, x2: x + 120, y2: y, length: 120, fixed: false };
 }
@@ -702,7 +712,7 @@ function drawInteractive(skipListUpdate) {
     const isAnySelected = m.els.some(p => selectedEl && selectedEl.id === p.el.id);
     const hasMultiple = m.els.length >= 2;
     iCtx.beginPath();
-    iCtx.arc(m.x, m.y, hasMultiple ? 8 : 6, 0, Math.PI * 2);
+    iCtx.arc(m.x, m.y, isTouchDevice ? (hasMultiple ? 12 : 10) : (hasMultiple ? 8 : 6), 0, Math.PI * 2);
     iCtx.fillStyle = hasMultiple ? '#f59e0b' : (isAnySelected ? '#4f46e5' : '#94a3b8');
     iCtx.fill();
     iCtx.strokeStyle = '#fff';
@@ -785,13 +795,13 @@ function getMousePos(e) {
 }
 
 function hitTest(pos) {
+  // 第一阶段：检查所有端点（端点优先级高于线段主体）
   for (let i = elements.length - 1; i >= 0; i--) {
     const el = elements[i];
-
     if (el.kind === 'line') {
       const pts = [{ x: el.x1, y: el.y1, idx: 0 }, { x: el.x2, y: el.y2, idx: 1 }];
       for (const p of pts) {
-        if (Math.hypot(pos.x - p.x, pos.y - p.y) < 12) {
+        if (Math.hypot(pos.x - p.x, pos.y - p.y) < HIT_RADIUS) {
           const shared = elements.filter(l => {
             if (l.id === el.id) return true;
             if (l.kind === 'line' && l.fixed) return false;
@@ -804,27 +814,30 @@ function hitTest(pos) {
           return { el, pointIndex: p.idx, sharedEls: shared };
         }
       }
-      if (el.fixed) continue;
-      const dx = el.x2 - el.x1, dy = el.y2 - el.y1;
-      const len = Math.hypot(dx, dy);
-      if (len === 0) continue;
-      const t = Math.max(0, Math.min(1, ((pos.x - el.x1) * dx + (pos.y - el.y1) * dy) / (len * len)));
-      const px = el.x1 + t * dx, py = el.y1 + t * dy;
-      if (Math.hypot(pos.x - px, pos.y - py) < 8) return { el, pointIndex: -1, sharedEls: [{ el, pointIdx: -1 }] };
     } else {
       const ep = getAngleEndpoints(el);
-      // 优先检测自由端点，避免与水平端点重叠时无法调节角度
       const pts = [
         { x: ep.fEnd.x, y: ep.fEnd.y, idx: 2 },
         { x: el.x, y: el.y, idx: 0 },
         { x: ep.hEnd.x, y: ep.hEnd.y, idx: 1 }
       ];
       for (const p of pts) {
-        if (Math.hypot(pos.x - p.x, pos.y - p.y) < 12) {
+        if (Math.hypot(pos.x - p.x, pos.y - p.y) < HIT_RADIUS) {
           return { el, pointIndex: p.idx, sharedEls: [{ el, pointIdx: p.idx }] };
         }
       }
     }
+  }
+  // 第二阶段：检查线段主体
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const el = elements[i];
+    if (el.kind !== 'line' || el.fixed) continue;
+    const dx = el.x2 - el.x1, dy = el.y2 - el.y1;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) continue;
+    const t = Math.max(0, Math.min(1, ((pos.x - el.x1) * dx + (pos.y - el.y1) * dy) / (len * len)));
+    const px = el.x1 + t * dx, py = el.y1 + t * dy;
+    if (Math.hypot(pos.x - px, pos.y - py) < LINE_HIT_RADIUS) return { el, pointIndex: -1, sharedEls: [{ el, pointIdx: -1 }] };
   }
   return null;
 }
@@ -844,14 +857,9 @@ iCanvas.addEventListener('mousedown', e => {
   }
 });
 
-iCanvas.addEventListener('mousemove', e => {
-  const pos = getMousePos(e);
-  if (!dragging) {
-    const hit = hitTest(pos);
-    iCanvas.style.cursor = hit ? 'grab' : 'default';
-    return;
-  }
-  iCanvas.style.cursor = 'grabbing';
+// 通用拖拽处理函数
+function handleDrag(pos) {
+  if (!dragging) return;
   const el = dragging.el;
 
   const shared = dragging.sharedEls || [{ el, pointIdx: dragging.pointIndex }];
@@ -938,6 +946,17 @@ iCanvas.addEventListener('mousemove', e => {
   }
 
   requestDraw(true);
+}
+
+iCanvas.addEventListener('mousemove', e => {
+  const pos = getMousePos(e);
+  if (!dragging) {
+    const hit = hitTest(pos);
+    iCanvas.style.cursor = hit ? 'grab' : 'default';
+    return;
+  }
+  iCanvas.style.cursor = 'grabbing';
+  handleDrag(pos);
 });
 
 iCanvas.addEventListener('mouseup', () => {
@@ -950,6 +969,45 @@ iCanvas.addEventListener('mouseup', () => {
 iCanvas.addEventListener('mouseleave', () => {
   if (dragging) { dragging = null; showSnap(false); drawInteractive(); }
 });
+
+// 触摸事件支持
+iCanvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const pos = getTouchPos(e);
+  const hit = hitTest(pos);
+  if (hit) {
+    dragging = hit;
+    selectedEl = hit.el;
+    showProps(hit.el);
+    drawInteractive();
+  } else {
+    selectedEl = null;
+    hideProps();
+    drawInteractive();
+  }
+}, { passive: false });
+
+iCanvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const pos = getTouchPos(e);
+  if (!dragging) return;
+  iCanvas.style.cursor = 'grabbing';
+  handleDrag(pos);
+}, { passive: false });
+
+iCanvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  dragging = null;
+  iCanvas.style.cursor = 'default';
+  showSnap(false);
+  if (selectedEl) showProps(selectedEl);
+  drawInteractive();
+}, { passive: false });
+
+iCanvas.addEventListener('touchcancel', e => {
+  e.preventDefault();
+  if (dragging) { dragging = null; showSnap(false); drawInteractive(); }
+}, { passive: false });
 
 function showSnap(v) {
   document.getElementById('snapIndicator').classList.toggle('visible', v);

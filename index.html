@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>createmeow | Github Page</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js"></script>
+    <style>
+        :root {
+            --accent-blue: #2563eb;
+            --accent-purple: #9333ea;
+            --border-color: #000000;
+            --bg-main: #ffffff;
+            --bg-sidebar: #ffffff;
+            --text-normal: #111111;
+            --text-secondary: #444444;
+            --item-hover-bg: linear-gradient(90deg, rgba(37,99,235,0.12), rgba(147,51,234,0.12));
+            --item-active-bg: linear-gradient(90deg, rgba(37,99,235,0.18), rgba(147,51,234,0.18));
+            --box-bg: #ffffff;
+            --box-border: #dddddd;
+        }
+        [data-theme="dark"] {
+            --border-color: #333333;
+            --bg-main: #121212;
+            --bg-sidebar: #1a1a1a;
+            --text-normal: #eeeeee;
+            --text-secondary: #bbbbbb;
+            --item-hover-bg: linear-gradient(90deg, rgba(37,99,235,0.22), rgba(147,51,234,0.22));
+            --item-active-bg: linear-gradient(90deg, rgba(37,99,235,0.30), rgba(147,51,234,0.30));
+            --box-bg: #1e1e1e;
+            --box-border: #444444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        body {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            color: var(--text-normal);
+            background-color: var(--bg-main);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .tip-warning{
+            position:fixed;
+            top:0;
+            left:0;
+            right:0;
+            background:#ef4444;
+            color:white;
+            text-align:center;
+            padding:6px;
+            z-index:99;
+            display:none;
+        }
+        .sidebar {
+            width: 280px;
+            border-right: 4px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-sidebar);
+        }
+        .profile-header {
+            padding: 24px 16px;
+            border-bottom:4px solid var(--border-color);
+            display:flex;
+            align-items:center;
+            gap:12px;
+        }
+        .avatar {
+            width:48px;
+            height:48px;
+            border-radius:50%;
+            flex-shrink:0;
+            object-fit: cover;
+        }
+        .username {
+            font-size:20px;
+            font-weight:500;
+        }
+        .theme-toggle-wrap {
+            margin-left:auto;
+        }
+        #themeBtn {
+            padding:4px 10px;
+            border-radius:6px;
+            border:1px solid var(--box-border);
+            background:var(--box-bg);
+            color:var(--text-normal);
+            cursor:pointer;
+        }
+        .project-list {
+            flex:1;
+            overflow-y:auto;
+        }
+        .project-item {
+            padding:14px 18px;
+            font-size:18px;
+            cursor:pointer;
+            transition: 0.2s;
+        }
+        .project-item:hover {
+            background: var(--item-hover-bg);
+        }
+        .project-item.active {
+            border-left:6px solid var(--accent-purple);
+            background: var(--item-active-bg);
+        }
+        .main-content {
+            flex:1;
+            padding:32px 40px;
+            overflow-y:auto;
+        }
+        .project-title {
+            font-size:42px;
+            font-weight:700;
+            margin-bottom:12px;
+            background: linear-gradient(90deg,var(--accent-blue),var(--accent-purple));
+            -webkit-background-clip:text;
+            color:transparent;
+        }
+        .section-label {
+            font-size:22px;
+            color:var(--text-secondary);
+            margin:8px 0;
+        }
+        .readme-box, .activity-box {
+            margin-top:24px;
+            padding:20px;
+            border:2px solid var(--box-border);
+            border-radius:8px;
+            min-height:180px;
+            background-color: var(--box-bg);
+        }
+        .loading {
+            color:var(--text-secondary);
+        }
+        .readme-box h1,.readme-box h2,.readme-box h3 {
+            margin: 1em 0 0.5em;
+        }
+        .readme-box p {
+            margin:0.75em 0;
+            line-height:1.6;
+        }
+        .readme-box pre {
+            padding:12px;
+            border-radius:6px;
+            overflow-x:auto;
+            background-color:#272822;
+            color:#f8f8f2;
+        }
+        .readme-box code {
+            font-family:Consolas,Monaco,monospace;
+        }
+        .readme-box a {
+            color: var(--accent-blue);
+        }
+        .commit-item {
+            margin:6px 0;
+            padding:6px 0;
+            border-bottom:1px solid var(--box-border);
+        }
+        .commit-date {
+            font-size:13px;
+            color:var(--text-secondary);
+            margin-top:4px;
+        }
+        @media(max-width:768px){
+            body{flex-direction:column;}
+            .sidebar{width:100%;height:auto;border-right:none;border-bottom:4px solid var(--border-color);}
+            .main-content{padding:20px 16px;}
+        }
+    </style>
+</head>
+<body>
+    <div class="tip-warning" id="fileProtocolWarn">⚠️禁止使用file://本地文件打开，请启动HTTP服务预览！</div>
+    <div class="sidebar">
+        <div class="profile-header">
+            <img class="avatar" id="avatarImg" alt="avatar">
+            <span class="username">createmeow</span>
+            <div class="theme-toggle-wrap">
+                <button id="themeBtn">🌙</button>
+            </div>
+        </div>
+        <div class="project-list" id="projectList">
+            <div class="loading" style="padding:16px;">加载仓库列表...</div>
+        </div>
+    </div>
+    <div class="main-content">
+        <h1 class="project-title" id="projName">项目名称</h1>
+        <div class="section-label">项目readme</div>
+        <div class="readme-box" id="readmeContent">
+            <div class="loading">选择左侧项目查看Readme</div>
+        </div>
+        <div class="section-label" style="margin-top:32px;">项目最近动态</div>
+        <div class="activity-box" id="activityContent">
+            <div class="loading">项目提交动态</div>
+        </div>
+    </div>
+
+    <script>
+        const GITHUB_USER = "createmeow";
+        let repos = [];
+        const projectListEl = document.getElementById("projectList");
+        const projNameEl = document.getElementById("projName");
+        const readmeEl = document.getElementById("readmeContent");
+        const activityEl = document.getElementById("activityContent");
+        const avatarImg = document.getElementById("avatarImg");
+        const themeBtn = document.getElementById("themeBtn");
+        const fileProtocolWarn = document.getElementById("fileProtocolWarn");
+
+        if(window.location.protocol === "file:"){
+            fileProtocolWarn.style.display = "block";
+        }
+
+        function applyTheme(mode){
+            if(mode === 'dark'){
+                document.body.setAttribute("data-theme","dark");
+                themeBtn.innerText = "☀️";
+                localStorage.setItem("blog-theme","dark");
+            }else{
+                document.body.removeAttribute("data-theme");
+                themeBtn.innerText = "🌙";
+                localStorage.setItem("blog-theme","light");
+            }
+        }
+        const saved = localStorage.getItem("blog-theme") || "light";
+        applyTheme(saved);
+        themeBtn.onclick = ()=>{
+            const now = document.body.hasAttribute("data-theme") ? "dark" : "light";
+            applyTheme(now === "dark" ? "light":"dark");
+        }
+
+        async function fetchUserInfo(){
+            try {
+                const resp = await fetch(`https://api.github.com/users/${GITHUB_USER}`);
+                if(!resp.ok) throw new Error("api limit");
+                const userInfo = await resp.json();
+                avatarImg.src = userInfo.avatar_url;
+            }catch(e){
+                avatarImg.style.display="none";
+            }
+        }
+
+        async function fetchRepos(){
+            projectListEl.innerHTML = `<div class="loading" style="padding:16px;">加载仓库列表...</div>`;
+            try{
+                const resp = await fetch(`https://api.github.com/users/${GITHUB_USER}/repos?sort=updated&per_page=30`);
+                if(resp.status === 403){
+                    projectListEl.innerHTML = `<div class="loading" style="padding:16px;">⚠️Github API访问频率超限，请等待一小时后重试</div>`;
+                    return;
+                }
+                if(!resp.ok){
+                    projectListEl.innerHTML = `<div class="loading" style="padding:16px;">网络请求异常 ${resp.status}</div>`;
+                    return;
+                }
+                repos = await resp.json();
+                renderRepoList();
+            }catch(err){
+                projectListEl.innerHTML = `<div class="loading" style="padding:16px;">网络请求失败，请确认使用http服务打开页面</div>`;
+            }
+        }
+
+        function renderRepoList(){
+            projectListEl.innerHTML = "";
+            repos.forEach((repo)=>{
+                const div = document.createElement("div");
+                div.className = "project-item";
+                div.textContent = repo.name;
+                div.onclick = (ev)=> selectRepo(repo, ev);
+                projectListEl.appendChild(div);
+            })
+        }
+
+        async function getReadmeRaw(repo) {
+            const branch = repo.default_branch;
+            const rawUrl = `https://raw.githubusercontent.com/${GITHUB_USER}/${repo.name}/${branch}/README.md`;
+            try {
+                const resp = await fetch(rawUrl);
+                if (resp.status === 404) {
+                    return "ℹ️ 该仓库默认分支根目录不存在 README.md 文件";
+                }
+                if (!resp.ok) {
+                    return `读取README失败 HTTP:${resp.status}`;
+                }
+                const mdText = await resp.text();
+                return marked.parse(mdText);
+            } catch (e) {
+                console.error("raw读取异常", e);
+                return "读取README失败，网络异常";
+            }
+        }
+
+        async function selectRepo(repo, event){
+            document.querySelectorAll(".project-item").forEach(el=>el.classList.remove("active"));
+            event.target.classList.add("active");
+
+            projNameEl.innerText = repo.name;
+            readmeEl.innerHTML = `<div class="loading">正在读取README...</div>`;
+            activityEl.innerHTML = `<div class="loading">获取提交记录...</div>`;
+
+            readmeEl.innerHTML = await getReadmeRaw(repo);
+
+            try{
+                const commitResp = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${repo.name}/commits?per_page=8`);
+                if(commitResp.status === 403){
+                    activityEl.innerText = "⚠️ Github API访问频率受限，暂时无法获取提交记录";
+                    return;
+                }
+                if(!commitResp.ok){
+                    activityEl.innerText = `获取提交记录失败 HTTP:${commitResp.status}`;
+                    return;
+                }
+                const commits = await commitResp.json();
+                if(!Array.isArray(commits) || !commits.length){
+                    activityEl.innerText = "暂无提交记录";
+                    return;
+                }
+                let html = "";
+                commits.forEach(c=>{
+                    const msg = c.commit.message.split("\n")[0];
+                    const date = new Date(c.commit.author.date).toLocaleString();
+                    html += `<div class="commit-item">
+                    <div>${msg}</div>
+                    <div class="commit-date">${date}</div>
+                    </div>`
+                })
+                activityEl.innerHTML = html;
+            }catch(err){
+                activityEl.innerText = "获取项目动态失败";
+            }
+        }
+        fetchUserInfo();
+        fetchRepos();
+    </script>
+</body>
+</html>

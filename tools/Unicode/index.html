@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unicode \uXXXX 转义转换器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        body {
+            background-color: #1e1e2e;
+            color: #e5e7eb;
+            padding: 24px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 24px;
+            font-size: 24px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width:720px){
+            .container{
+                grid-template-columns: 1fr;
+            }
+        }
+        .panel {
+            display: flex;
+            flex-direction: column;
+            gap:10px;
+        }
+        label {
+            font-weight: 500;
+            font-size:15px;
+        }
+        textarea {
+            width:100%;
+            min-height:260px;
+            background:#2d2d3f;
+            color:#f0f0f0;
+            border:1px solid #44445a;
+            border-radius:8px;
+            padding:12px;
+            font-family:Consolas, monospace;
+            font-size:14px;
+            resize: vertical;
+        }
+        .btn-group{
+            display:flex;
+            gap:8px;
+            flex-wrap:wrap;
+        }
+        button{
+            padding:8px 14px;
+            border:none;
+            border-radius:6px;
+            cursor:pointer;
+            font-size:14px;
+        }
+        .btn-conv{
+            background:#3b82f6;
+            color:white;
+        }
+        .btn-copy{
+            background:#10b981;
+            color:white;
+        }
+        .btn-clear{
+            background:#6b7280;
+            color:white;
+        }
+        .tip{
+            margin-top:16px;
+            font-size:13px;
+            color:#9ca3af;
+        }
+    </style>
+</head>
+<body>
+    <h1>Unicode \uXXXX 双向转换器</h1>
+    <div class="container">
+        <div class="panel">
+            <label>原始文本（普通字符）</label>
+            <textarea id="rawInput" placeholder="在这里粘贴普通文本，例如：你好世界 😊"></textarea>
+            <div class="btn-group">
+                <button class="btn-conv" onclick="encodeUnicode()">转为 \uXXXX 转义</button>
+                <button class="btn-copy" onclick="copyRaw()">复制输入</button>
+                <button class="btn-clear" onclick="clearRaw()">清空</button>
+            </div>
+        </div>
+        <div class="panel">
+            <label>转义文本 (\uXXXX)</label>
+            <textarea id="escInput" placeholder="粘贴 \u转义字符串，例如：\u4f60\u597d\u4e16\u754c"></textarea>
+            <div class="btn-group">
+                <button class="btn-conv" onclick="decodeUnicode()">解析为普通文本</button>
+                <button class="btn-copy" onclick="copyEsc()">复制输出</button>
+                <button class="btn-clear" onclick="clearEsc()">清空</button>
+            </div>
+        </div>
+    </div>
+    <div class="tip">
+        说明：编码会把每一个字符转为 \uXXXX；解码解析字符串中所有 \uXXXX 序列。支持中文、emoji、特殊符号。
+    </div>
+
+<script>
+// 普通文本 → \uXXXX 转义
+function encodeUnicode(){
+    const raw = document.getElementById('rawInput').value;
+    let result = '';
+    for(let i=0;i<raw.length;i++){
+        const code = raw.charCodeAt(i);
+        result += '\\u' + code.toString(16).padStart(4,'0');
+    }
+    document.getElementById('escInput').value = result;
+}
+
+// \uXXXX 转义 → 普通文本
+function decodeUnicode(){
+    let str = document.getElementById('escInput').value;
+    // 使用正则替换所有 \uXXXX
+    const reg = /\\u([0-9a-fA-F]{4})/g;
+    const out = str.replace(reg, (match,hex)=>{
+        return String.fromCharCode(parseInt(hex,16));
+    });
+    document.getElementById('rawInput').value = out;
+}
+
+//复制
+async function copyRaw(){
+    await navigator.clipboard.writeText(document.getElementById('rawInput').value);
+    alert("已复制普通文本");
+}
+async function copyEsc(){
+    await navigator.clipboard.writeText(document.getElementById('escInput').value);
+    alert("已复制转义文本");
+}
+
+function clearRaw(){document.getElementById('rawInput').value=''}
+function clearEsc(){document.getElementById('escInput').value=''}
+</script>
+</body>
+</html>

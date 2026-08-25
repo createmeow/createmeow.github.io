@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>几何图形工具</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --primary: #4f46e5; --primary-light: #818cf8; --primary-bg: #eef2ff;
+    --accent: #f59e0b; --accent-light: #fcd34d;
+    --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
+    --text: #1e293b; --text-secondary: #64748b; --text-muted: #94a3b8;
+    --success: #10b981; --danger: #ef4444;
+    --radius: 12px; --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.04);
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; }
+
+  /* Header */
+  .header { background: linear-gradient(135deg, var(--primary), #7c3aed); color: #fff; padding: 20px 32px; display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size: 1.5rem; font-weight: 700; }
+  .header p { font-size: .875rem; opacity: .85; }
+
+  /* Tabs */
+  .tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 32px; gap: 0; }
+  .tab { padding: 14px 24px; cursor: pointer; font-size: .9rem; font-weight: 500; color: var(--text-secondary); border-bottom: 2px solid transparent; transition: all .2s; user-select: none; }
+  .tab:hover { color: var(--primary); background: var(--primary-bg); }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+  /* Panels */
+  .panel { display: none; padding: 24px 32px; }
+  .panel.active { display: block; }
+
+  /* Cards */
+  .card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; margin-bottom: 20px; }
+  .card-title { font-size: 1rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .card-title .icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: .85rem; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 8px; border: none; font-size: .875rem; font-weight: 500; cursor: pointer; transition: all .15s; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: #4338ca; }
+  .btn-outline { background: transparent; color: var(--primary); border: 1.5px solid var(--primary); }
+  .btn-outline:hover { background: var(--primary-bg); }
+  .btn-sm { padding: 6px 14px; font-size: .8rem; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-danger:hover { background: #dc2626; }
+
+  /* Triangle module */
+  .triangle-layout { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
+  @media (max-width: 900px) { .triangle-layout { grid-template-columns: 1fr; } }
+
+  .canvas-wrap { position: relative; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .canvas-wrap canvas { display: block; width: 100%; height: 500px; }
+
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .info-item { background: var(--bg); border-radius: 8px; padding: 12px; }
+  .info-label { font-size: .75rem; color: var(--text-muted); margin-bottom: 4px; }
+  .info-value { font-size: 1.1rem; font-weight: 600; color: var(--text); }
+  .info-value.type-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: .8rem; }
+  .type-acute { background: #dcfce7; color: #166534; }
+  .type-right { background: #dbeafe; color: #1e40af; }
+  .type-obtuse { background: #fef3c7; color: #92400e; }
+  .type-isosceles { background: #f3e8ff; color: #6b21a8; }
+  .type-equilateral { background: #fce7f3; color: #9d174d; }
+
+  .angle-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .angle-bar-label { font-size: .8rem; color: var(--text-secondary); width: 24px; }
+  .angle-bar-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .angle-bar-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+  .angle-bar-val { font-size: .8rem; font-weight: 600; width: 50px; text-align: right; }
+
+  /* Interactive module */
+  .interactive-layout { display: grid; grid-template-columns: 280px 1fr; gap: 20px; }
+  @media (max-width: 900px) { .interactive-layout { grid-template-columns: 1fr; } }
+
+  .element-palette { display: flex; flex-direction: column; gap: 12px; }
+  .palette-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg); border-radius: 8px; cursor: grab; border: 2px solid transparent; transition: all .15s; }
+  .palette-item:hover { border-color: var(--primary-light); background: var(--primary-bg); }
+  .palette-item:active { cursor: grabbing; }
+  .palette-icon { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .palette-icon.line-icon { background: #dbeafe; }
+  .palette-icon.angle-icon { background: #fef3c7; }
+
+  .canvas-container { position: relative; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .canvas-container canvas { display: block; width: 100%; height: 600px; }
+
+  /* Properties panel */
+  .props-panel { position: absolute; top: 12px; right: 12px; background: var(--surface); border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.12); padding: 16px; width: 240px; z-index: 10; display: none; }
+  .props-panel.visible { display: block; }
+  .props-panel h4 { font-size: .85rem; font-weight: 600; margin-bottom: 12px; }
+  .prop-row { margin-bottom: 12px; }
+  .prop-label { font-size: .75rem; color: var(--text-muted); margin-bottom: 4px; }
+  .prop-input { width: 100%; padding: 6px 10px; border: 1.5px solid var(--border); border-radius: 6px; font-size: .85rem; outline: none; transition: border-color .15s; }
+  .prop-input:focus { border-color: var(--primary); }
+  .prop-slider { width: 100%; margin-top: 4px; accent-color: var(--primary); }
+
+  .toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+
+  .snap-indicator { position: absolute; bottom: 12px; left: 12px; background: var(--success); color: #fff; padding: 4px 12px; border-radius: 20px; font-size: .75rem; font-weight: 500; opacity: 0; transition: opacity .2s; z-index: 10; }
+  .snap-indicator.visible { opacity: 1; }
+
+  .element-list { max-height: 200px; overflow-y: auto; }
+  .element-list-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg); border-radius: 6px; margin-bottom: 6px; font-size: .8rem; }
+  .element-list-item .del-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: .9rem; padding: 2px 6px; border-radius: 4px; }
+  .element-list-item .del-btn:hover { background: #fef2f2; }
+
+  .hint { font-size: .8rem; color: var(--text-muted); padding: 8px 12px; background: var(--primary-bg); border-radius: 8px; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>几何图形工具</h1>
+    <p>三角形生成 & 交互式几何元素组合</p>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="triangle">三角形生成</div>
+  <div class="tab" data-tab="interactive">几何元素组合</div>
+</div>
+
+<!-- Triangle Panel -->
+<div class="panel active" id="panel-triangle">
+  <div class="triangle-layout">
+    <div>
+      <div class="toolbar">
+        <button class="btn btn-primary" id="btnRandomTri">随机生成</button>
+        <button class="btn btn-outline" id="btnAcute">锐角三角形</button>
+        <button class="btn btn-outline" id="btnRight">直角三角形</button>
+        <button class="btn btn-outline" id="btnObtuse">钝角三角形</button>
+        <button class="btn btn-outline" id="btnIsosceles">等腰三角形</button>
+        <button class="btn btn-outline" id="btnEquilateral">等边三角形</button>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="triCanvas"></canvas>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title"><span class="icon" style="background:#eef2ff;color:var(--primary);">△</span> 三角形信息</div>
+        <div class="info-grid" id="triInfo">
+          <div class="info-item"><div class="info-label">类型</div><div class="info-value" id="infoType">-</div></div>
+          <div class="info-item"><div class="info-label">角度和</div><div class="info-value" id="infoAngleSum">-</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="icon" style="background:#fef3c7;color:#92400e;">∠</span> 内角</div>
+        <div id="angleBars"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="icon" style="background:#dcfce7;color:#166534;">─</span> 边长</div>
+        <div class="info-grid" id="sideInfo"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Interactive Panel -->
+<div class="panel" id="panel-interactive">
+  <div class="interactive-layout">
+    <div class="element-palette">
+      <div class="card">
+        <div class="card-title"><span class="icon" style="background:#dbeafe;color:#1e40af;">+</span> 添加元素</div>
+        <div class="palette-item" id="addLine">
+          <div class="palette-icon line-icon"><svg width="24" height="24"><line x1="4" y1="20" x2="20" y2="4" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/></svg></div>
+          <div><div style="font-weight:600;font-size:.85rem;">线段</div><div style="font-size:.75rem;color:var(--text-muted);">点击添加到画布</div></div>
+        </div>
+        <div class="palette-item" id="addAngle" style="margin-top:8px;">
+          <div class="palette-icon angle-icon"><svg width="24" height="24"><path d="M4 20 L20 20 M4 20 L12 6" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round"/></svg></div>
+          <div><div style="font-weight:600;font-size:.85rem;">角</div><div style="font-size:.75rem;color:var(--text-muted);">水平边+自由边，可调节角度</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="icon" style="background:#f3e8ff;color:#6b21a8;">☰</span> 元素列表</div>
+        <div class="element-list" id="elementList"><div class="hint">画布为空，请添加元素</div></div>
+      </div>
+      <div class="hint">拖拽线段端点可调整方向和位置，选中后可在属性面板精确调节长度。将端点拖到另一线段端点附近会自动吸附，吸附后自动显示两线段夹角。</div>
+    </div>
+    <div class="canvas-container">
+      <canvas id="interactiveCanvas"></canvas>
+      <div class="props-panel" id="propsPanel">
+        <h4 id="propsTitle">属性</h4>
+        <div id="propsContent"></div>
+        <button class="btn btn-danger btn-sm" id="propsDelete" style="margin-top:8px;width:100%;justify-content:center;">删除元素</button>
+      </div>
+      <div class="snap-indicator" id="snapIndicator">已吸附</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ TAB SWITCHING ============
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    if (tab.dataset.tab === 'interactive') resizeInteractiveCanvas();
+  });
+});
+
+// ============ TRIANGLE MODULE ============
+const triCanvas = document.getElementById('triCanvas');
+const triCtx = triCanvas.getContext('2d');
+let currentTriangle = null;
+
+function resizeTriCanvas() {
+  const rect = triCanvas.parentElement.getBoundingClientRect();
+  triCanvas.width = rect.width * devicePixelRatio;
+  triCanvas.height = 500 * devicePixelRatio;
+  triCanvas.style.height = '500px';
+  triCtx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  if (currentTriangle) drawTriangle(currentTriangle);
+}
+resizeTriCanvas();
+window.addEventListener('resize', resizeTriCanvas);
+
+function generateTriangle(type) {
+  let angles, sides;
+  const r = () => Math.random();
+
+  switch (type) {
+    case 'acute':
+      angles = [50 + r() * 30, 50 + r() * 30, 0];
+      angles[2] = 180 - angles[0] - angles[1];
+      if (angles[2] <= 50 || angles[2] >= 90) { angles[0] = 55; angles[1] = 60; angles[2] = 65; }
+      break;
+    case 'right':
+      angles = [90, 30 + r() * 40, 0];
+      angles[2] = 180 - angles[0] - angles[1];
+      break;
+    case 'obtuse':
+      angles = [100 + r() * 50, 20 + r() * 30, 0];
+      angles[2] = 180 - angles[0] - angles[1];
+      if (angles[2] <= 0) { angles[0] = 110; angles[1] = 35; angles[2] = 35; }
+      break;
+    case 'isosceles':
+      const base = 30 + r() * 50;
+      angles = [base, (180 - base) / 2, (180 - base) / 2];
+      if (Math.abs(angles[0] - 60) < 3) angles = [50, 65, 65];
+      break;
+    case 'equilateral':
+      angles = [60, 60, 60];
+      break;
+    default: // random
+      const a1 = 20 + r() * 130;
+      const a2 = 20 + r() * (180 - a1 - 20);
+      angles = [a1, a2, 180 - a1 - a2];
+  }
+
+  // Round angles
+  angles[0] = Math.round(angles[0] * 10) / 10;
+  angles[1] = Math.round(angles[1] * 10) / 10;
+  angles[2] = Math.round((180 - angles[0] - angles[1]) * 10) / 10;
+  // Fix rounding
+  const sum = angles[0] + angles[1] + angles[2];
+  angles[2] = Math.round((angles[2] + (180 - sum)) * 10) / 10;
+
+  // Compute sides using sine rule (scale factor)
+  const scale = 1.5 + r() * 1.5;
+  const rad = a => a * Math.PI / 180;
+  sides = [
+    Math.round(Math.sin(rad(angles[0])) * 100 * scale) / 100,
+    Math.round(Math.sin(rad(angles[1])) * 100 * scale) / 100,
+    Math.round(Math.sin(rad(angles[2])) * 100 * scale) / 100
+  ];
+
+  // Determine type labels
+  const types = [];
+  if (angles[0] === 60 && angles[1] === 60) types.push('equilateral');
+  else if (sides[0] === sides[1] || sides[1] === sides[2] || sides[0] === sides[2]) types.push('isosceles');
+  if (angles.some(a => Math.abs(a - 90) < 0.5)) types.push('right');
+  else if (angles.some(a => a > 90)) types.push('obtuse');
+  else types.push('acute');
+  if (types.includes('equilateral')) types.push('isosceles');
+
+  return { angles, sides, types: [...new Set(types)] };
+}
+
+function drawTriangle(tri) {
+  const w = triCanvas.width / devicePixelRatio;
+  const h = triCanvas.height / devicePixelRatio;
+  triCtx.clearRect(0, 0, w, h);
+
+  // Compute vertices from sides and angles
+  const { angles, sides } = tri;
+  const rad = a => a * Math.PI / 180;
+
+  // Place vertex A at origin, B along x-axis
+  const maxSide = Math.max(...sides);
+  const scale = Math.min(w, h) * 0.55 / maxSide;
+
+  const Ax = 0, Ay = 0;
+  const Bx = sides[2] * scale, By = 0; // side c (opposite C)
+  const Cx = sides[1] * scale * Math.cos(rad(angles[0]));
+  const Cy = -sides[1] * scale * Math.sin(rad(angles[0]));
+
+  // Center
+  const cx = (Ax + Bx + Cx) / 3;
+  const cy = (Ay + By + Cy) / 3;
+  const ox = w / 2 - cx;
+  const oy = h / 2 - cy;
+
+  const pts = [
+    { x: Ax + ox, y: Ay + oy },
+    { x: Bx + ox, y: By + oy },
+    { x: Cx + ox, y: Cy + oy }
+  ];
+
+  // Fill
+  triCtx.beginPath();
+  triCtx.moveTo(pts[0].x, pts[0].y);
+  triCtx.lineTo(pts[1].x, pts[1].y);
+  triCtx.lineTo(pts[2].x, pts[2].y);
+  triCtx.closePath();
+  const grad = triCtx.createLinearGradient(pts[0].x, pts[0].y, pts[2].x, pts[2].y);
+  grad.addColorStop(0, 'rgba(79,70,229,0.08)');
+  grad.addColorStop(1, 'rgba(124,58,237,0.08)');
+  triCtx.fillStyle = grad;
+  triCtx.fill();
+
+  // Stroke
+  triCtx.beginPath();
+  triCtx.moveTo(pts[0].x, pts[0].y);
+  triCtx.lineTo(pts[1].x, pts[1].y);
+  triCtx.lineTo(pts[2].x, pts[2].y);
+  triCtx.closePath();
+  triCtx.strokeStyle = '#4f46e5';
+  triCtx.lineWidth = 2.5;
+  triCtx.stroke();
+
+  // Vertices
+  pts.forEach((p, i) => {
+    triCtx.beginPath();
+    triCtx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+    triCtx.fillStyle = '#4f46e5';
+    triCtx.fill();
+  });
+
+  // Labels - vertices
+  const labels = ['A', 'B', 'C'];
+  const labelOffsets = [
+    { dx: -18, dy: 18 }, { dx: 12, dy: 18 }, { dx: -5, dy: -14 }
+  ];
+  pts.forEach((p, i) => {
+    triCtx.font = 'bold 14px sans-serif';
+    triCtx.fillStyle = '#4f46e5';
+    triCtx.fillText(labels[i], p.x + labelOffsets[i].dx, p.y + labelOffsets[i].dy);
+  });
+
+  // Labels - sides
+  const sideLabels = ['a', 'b', 'c'];
+  const sideMids = [
+    { x: (pts[1].x + pts[2].x) / 2, y: (pts[1].y + pts[2].y) / 2 },
+    { x: (pts[0].x + pts[2].x) / 2, y: (pts[0].y + pts[2].y) / 2 },
+    { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 }
+  ];
+  sideMids.forEach((m, i) => {
+    triCtx.font = '13px sans-serif';
+    triCtx.fillStyle = '#64748b';
+    triCtx.fillText(`${sideLabels[i]} = ${sides[i].toFixed(1)}`, m.x + 8, m.y - 6);
+  });
+
+  // Angle arcs
+  const arcColors = ['#ef4444', '#10b981', '#f59e0b'];
+  pts.forEach((p, i) => {
+    const prev = pts[(i + 2) % 3];
+    const next = pts[(i + 1) % 3];
+    let a1 = Math.atan2(prev.y - p.y, prev.x - p.x);
+    let a2 = Math.atan2(next.y - p.y, next.x - p.x);
+    // Ensure we draw the interior arc
+    let diff = a2 - a1;
+    if (diff > Math.PI) a1 += 2 * Math.PI;
+    if (diff < -Math.PI) a2 += 2 * Math.PI;
+    if (a1 > a2) [a1, a2] = [a2, a1];
+    if (a2 - a1 > Math.PI) { const tmp = a1; a1 = a2; a2 = tmp + 2 * Math.PI; }
+
+    triCtx.beginPath();
+    triCtx.arc(p.x, p.y, 25, a1, a2);
+    triCtx.strokeStyle = arcColors[i];
+    triCtx.lineWidth = 2;
+    triCtx.stroke();
+
+    // Angle value
+    const mid = (a1 + a2) / 2;
+    triCtx.font = 'bold 12px sans-serif';
+    triCtx.fillStyle = arcColors[i];
+    triCtx.fillText(`${tri.angles[i].toFixed(1)}°`, p.x + Math.cos(mid) * 42 - 12, p.y + Math.sin(mid) * 42 + 4);
+  });
+
+  updateTriInfo(tri);
+}
+
+function updateTriInfo(tri) {
+  const typeMap = { acute: '锐角三角形', right: '直角三角形', obtuse: '钝角三角形', isosceles: '等腰三角形', equilateral: '等边三角形' };
+  const classMap = { acute: 'type-acute', right: 'type-right', obtuse: 'type-obtuse', isosceles: 'type-isosceles', equilateral: 'type-equilateral' };
+
+  const typeEl = document.getElementById('infoType');
+  typeEl.innerHTML = tri.types.map(t => `<span class="type-badge ${classMap[t]}">${typeMap[t]}</span>`).join(' ');
+
+  document.getElementById('infoAngleSum').textContent = tri.angles.reduce((a, b) => a + b, 0).toFixed(1) + '°';
+
+  // Angle bars
+  const barColors = ['#ef4444', '#10b981', '#f59e0b'];
+  const names = ['A', 'B', 'C'];
+  document.getElementById('angleBars').innerHTML = tri.angles.map((a, i) => `
+    <div class="angle-bar">
+      <div class="angle-bar-label">${names[i]}</div>
+      <div class="angle-bar-track"><div class="angle-bar-fill" style="width:${a/180*100}%;background:${barColors[i]}"></div></div>
+      <div class="angle-bar-val" style="color:${barColors[i]}">${a.toFixed(1)}°</div>
+    </div>
+  `).join('');
+
+  // Sides
+  const sideNames = ['a (BC)', 'b (AC)', 'c (AB)'];
+  document.getElementById('sideInfo').innerHTML = tri.sides.map((s, i) => `
+    <div class="info-item"><div class="info-label">${sideNames[i]}</div><div class="info-value">${s.toFixed(2)}</div></div>
+  `).join('');
+}
+
+function genAndDraw(type) {
+  currentTriangle = generateTriangle(type);
+  drawTriangle(currentTriangle);
+}
+
+document.getElementById('btnRandomTri').addEventListener('click', () => genAndDraw('random'));
+document.getElementById('btnAcute').addEventListener('click', () => genAndDraw('acute'));
+document.getElementById('btnRight').addEventListener('click', () => genAndDraw('right'));
+document.getElementById('btnObtuse').addEventListener('click', () => genAndDraw('obtuse'));
+document.getElementById('btnIsosceles').addEventListener('click', () => genAndDraw('isosceles'));
+document.getElementById('btnEquilateral').addEventListener('click', () => genAndDraw('equilateral'));
+
+genAndDraw('random');
+
+// ============ INTERACTIVE MODULE ============
+const iCanvas = document.getElementById('interactiveCanvas');
+const iCtx = iCanvas.getContext('2d');
+const SNAP_DIST = 14;
+let elements = []; // 统一存储线段和角
+let selectedEl = null;
+let dragging = null;
+let nextId = 1;
+let rafPending = false;
+
+function requestDraw(skipListUpdate) {
+  if (rafPending) return;
+  rafPending = true;
+  requestAnimationFrame(() => {
+    rafPending = false;
+    drawInteractive(skipListUpdate);
+  });
+}
+
+function resizeInteractiveCanvas() {
+  const rect = iCanvas.parentElement.getBoundingClientRect();
+  iCanvas.width = rect.width * devicePixelRatio;
+  iCanvas.height = 600 * devicePixelRatio;
+  iCanvas.style.height = '600px';
+  iCtx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  drawInteractive();
+}
+resizeInteractiveCanvas();
+window.addEventListener('resize', resizeInteractiveCanvas);
+
+// 触摸设备检测
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const HIT_RADIUS = isTouchDevice ? 24 : 12;
+const LINE_HIT_RADIUS = isTouchDevice ? 16 : 8;
+
+function getTouchPos(e) {
+  const t = e.touches[0] || e.changedTouches[0];
+  return getMousePos(t);
+}
+
+function createLine(x, y) {
+  return { id: nextId++, kind: 'line', x1: x, y1: y, x2: x + 120, y2: y, length: 120, fixed: false };
+}
+
+function createAngle(x, y) {
+  return { id: nextId++, kind: 'angle', x: x, y: y, angle: 60, hLength: 100, fLength: 100 };
+}
+
+// 获取角的两个端点坐标
+function getAngleEndpoints(el) {
+  return {
+    hEnd: { x: el.x + el.hLength, y: el.y },
+    fEnd: { x: el.x + Math.cos(el.angle * Math.PI / 180) * el.fLength, y: el.y - Math.sin(el.angle * Math.PI / 180) * el.fLength }
+  };
+}
+
+// 获取角的类型标签
+function getAngleType(angle) {
+  if (Math.abs(angle - 180) < 0.5) return { label: '平角', color: '#6b7280' };
+  if (Math.abs(angle - 90) < 0.5) return { label: '直角', color: '#3b82f6' };
+  if (angle < 90) return { label: '锐角', color: '#10b981' };
+  return { label: '钝角', color: '#f59e0b' };
+}
+
+// 获取所有元素的端点
+function getAllEndpoints() {
+  const pts = [];
+  elements.forEach(el => {
+    if (el.kind === 'line') {
+      pts.push({ x: el.x1, y: el.y1, el, idx: 0 });
+      pts.push({ x: el.x2, y: el.y2, el, idx: 1 });
+    } else {
+      const ep = getAngleEndpoints(el);
+      pts.push({ x: el.x, y: el.y, el, idx: 0 }); // 顶点
+      pts.push({ x: ep.hEnd.x, y: ep.hEnd.y, el, idx: 1 }); // 水平端点
+      pts.push({ x: ep.fEnd.x, y: ep.fEnd.y, el, idx: 2 }); // 自由端点
+    }
+  });
+  return pts;
+}
+
+// 合并吸附点
+function getSnappedEndpoints() {
+  const pts = getAllEndpoints();
+  const merged = [];
+  pts.forEach(p => {
+    let found = false;
+    for (const m of merged) {
+      if (Math.hypot(p.x - m.x, p.y - m.y) < SNAP_DIST * 0.5) {
+        m.els.push(p);
+        found = true;
+        break;
+      }
+    }
+    if (!found) merged.push({ x: p.x, y: p.y, els: [p] });
+  });
+  return { raw: pts, merged };
+}
+
+function drawInteractive(skipListUpdate) {
+  const w = iCanvas.width / devicePixelRatio;
+  const h = iCanvas.height / devicePixelRatio;
+  iCtx.clearRect(0, 0, w, h);
+
+  // 网格
+  iCtx.strokeStyle = '#f1f5f9';
+  iCtx.lineWidth = 1;
+  iCtx.beginPath();
+  for (let x = 0; x < w; x += 30) { iCtx.moveTo(x, 0); iCtx.lineTo(x, h); }
+  for (let y = 0; y < h; y += 30) { iCtx.moveTo(0, y); iCtx.lineTo(w, y); }
+  iCtx.stroke();
+
+  const { merged } = getSnappedEndpoints();
+
+  // 绘制线段
+  elements.filter(e => e.kind === 'line').forEach(line => {
+    const isSelected = selectedEl && selectedEl.id === line.id;
+    const color = line.fixed ? '#9ca3af' : (isSelected ? '#4f46e5' : '#64748b');
+    const lw = isSelected ? 3 : 2;
+
+    iCtx.beginPath();
+    iCtx.moveTo(line.x1, line.y1);
+    iCtx.lineTo(line.x2, line.y2);
+    iCtx.strokeStyle = color;
+    iCtx.lineWidth = lw;
+    if (line.fixed) iCtx.setLineDash([6, 4]);
+    iCtx.stroke();
+    iCtx.setLineDash([]);
+
+    const mx = (line.x1 + line.x2) / 2, my = (line.y1 + line.y2) / 2;
+    iCtx.font = 'bold 12px sans-serif';
+    iCtx.fillStyle = line.fixed ? '#9ca3af' : '#4f46e5';
+    iCtx.fillText(`${line.length.toFixed(0)}px`, mx + 8, my - 8);
+  });
+
+  // 绘制角元素
+  elements.filter(e => e.kind === 'angle').forEach(el => {
+    const isSelected = selectedEl && selectedEl.id === el.id;
+    const color = isSelected ? '#d97706' : '#b45309';
+    const lw = isSelected ? 3 : 2;
+    const ep = getAngleEndpoints(el);
+    const type = getAngleType(el.angle);
+
+    // 水平边
+    iCtx.beginPath();
+    iCtx.moveTo(el.x, el.y);
+    iCtx.lineTo(ep.hEnd.x, ep.hEnd.y);
+    iCtx.strokeStyle = color;
+    iCtx.lineWidth = lw;
+    iCtx.stroke();
+
+    // 自由边
+    iCtx.beginPath();
+    iCtx.moveTo(el.x, el.y);
+    iCtx.lineTo(ep.fEnd.x, ep.fEnd.y);
+    iCtx.strokeStyle = color;
+    iCtx.lineWidth = lw;
+    iCtx.stroke();
+
+    // 弧线
+    const arcR = 22;
+    iCtx.beginPath();
+    const startA = 0;
+    const endA = -el.angle * Math.PI / 180;
+    iCtx.arc(el.x, el.y, arcR, endA, startA);
+    iCtx.strokeStyle = '#f59e0b';
+    iCtx.lineWidth = 2;
+    iCtx.stroke();
+
+    // 角度标签
+    const midA = -el.angle * Math.PI / 360;
+    const labelR = arcR + 16;
+    const lx = el.x + Math.cos(midA) * labelR;
+    const ly = el.y + Math.sin(midA) * labelR;
+    iCtx.font = 'bold 12px sans-serif';
+    iCtx.fillStyle = '#f59e0b';
+    iCtx.textAlign = 'center';
+    iCtx.textBaseline = 'middle';
+    iCtx.fillText(`${el.angle.toFixed(1)}°`, lx, ly);
+
+    // 类型标签
+    iCtx.font = '11px sans-serif';
+    iCtx.fillStyle = type.color;
+    iCtx.fillText(type.label, lx, ly + 16);
+    iCtx.textAlign = 'start';
+    iCtx.textBaseline = 'alphabetic';
+
+    // 长度标签
+    const hmx = (el.x + ep.hEnd.x) / 2, hmy = (el.y + ep.hEnd.y) / 2;
+    iCtx.font = 'bold 11px sans-serif';
+    iCtx.fillStyle = color;
+    iCtx.fillText(`${el.hLength.toFixed(0)}px`, hmx, hmy - 10);
+
+    const fmx = (el.x + ep.fEnd.x) / 2, fmy = (el.y + ep.fEnd.y) / 2;
+    iCtx.fillText(`${el.fLength.toFixed(0)}px`, fmx + 8, fmy - 8);
+  });
+
+  // 吸附点夹角
+  merged.forEach(m => {
+    if (m.els.length < 2) return;
+    const uniqueEls = [...new Set(m.els.map(p => p.el))];
+    if (uniqueEls.length < 2) return;
+
+    const vx = m.x, vy = m.y;
+    const dirs = [];
+
+    uniqueEls.forEach(el => {
+      if (el.kind === 'line') {
+        let dx, dy;
+        if (Math.hypot(el.x1 - vx, el.y1 - vy) < SNAP_DIST) {
+          dx = el.x2 - vx; dy = el.y2 - vy;
+        } else {
+          dx = el.x1 - vx; dy = el.y1 - vy;
+        }
+        dirs.push(Math.atan2(dy, dx));
+      } else {
+        if (Math.hypot(el.x - vx, el.y - vy) < SNAP_DIST) {
+          dirs.push(0);
+          dirs.push(-el.angle * Math.PI / 180);
+        } else {
+          const ep = getAngleEndpoints(el);
+          if (Math.hypot(ep.hEnd.x - vx, ep.hEnd.y - vy) < SNAP_DIST) {
+            dirs.push(Math.atan2(el.y - ep.hEnd.y, el.x - ep.hEnd.x));
+          } else if (Math.hypot(ep.fEnd.x - vx, ep.fEnd.y - vy) < SNAP_DIST) {
+            dirs.push(Math.atan2(el.y - ep.fEnd.y, el.x - ep.fEnd.x));
+          }
+        }
+      }
+    });
+
+    if (dirs.length < 2) return;
+    const sortedDirs = dirs.slice().sort((a, b) => a - b);
+    const n = sortedDirs.length;
+
+    for (let i = 0; i < n; i++) {
+      const a1 = sortedDirs[i];
+      const a2 = sortedDirs[(i + 1) % n];
+      let angle = (a2 - a1) * 180 / Math.PI;
+      if (angle < 0) angle += 360;
+      if (angle >= 180) continue;
+
+      const arcR = 30 + i * 8;
+      iCtx.beginPath();
+      let drawA1 = a1, drawA2 = a2;
+      let diff = drawA2 - drawA1;
+      if (diff < 0) diff += 2 * Math.PI;
+      if (diff > Math.PI) {
+        const tmp = drawA1; drawA1 = drawA2; drawA2 = tmp;
+      }
+      iCtx.arc(vx, vy, arcR, drawA1, drawA2);
+      iCtx.strokeStyle = '#f59e0b';
+      iCtx.lineWidth = 2;
+      iCtx.stroke();
+
+      const cos1 = Math.cos(a1), sin1 = Math.sin(a1);
+      const cos2 = Math.cos(a2), sin2 = Math.sin(a2);
+      const bisX = cos1 + cos2, bisY = sin1 + sin2;
+      const bisLen = Math.hypot(bisX, bisY);
+      const labelR = arcR + 18;
+      const lx = vx + (bisX / bisLen) * labelR;
+      const ly = vy + (bisY / bisLen) * labelR;
+      iCtx.font = 'bold 12px sans-serif';
+      iCtx.fillStyle = '#f59e0b';
+      iCtx.textAlign = 'center';
+      iCtx.textBaseline = 'middle';
+      iCtx.fillText(`${angle.toFixed(1)}°`, lx, ly);
+      iCtx.textAlign = 'start';
+      iCtx.textBaseline = 'alphabetic';
+    }
+  });
+
+  // 绘制端点
+  merged.forEach(m => {
+    const isAnySelected = m.els.some(p => selectedEl && selectedEl.id === p.el.id);
+    const hasMultiple = m.els.length >= 2;
+    iCtx.beginPath();
+    iCtx.arc(m.x, m.y, isTouchDevice ? (hasMultiple ? 12 : 10) : (hasMultiple ? 8 : 6), 0, Math.PI * 2);
+    iCtx.fillStyle = hasMultiple ? '#f59e0b' : (isAnySelected ? '#4f46e5' : '#94a3b8');
+    iCtx.fill();
+    iCtx.strokeStyle = '#fff';
+    iCtx.lineWidth = 2;
+    iCtx.stroke();
+  });
+
+  if (!skipListUpdate) updateElementList();
+}
+
+function updateElementList() {
+  const list = document.getElementById('elementList');
+  if (elements.length === 0) {
+    list.innerHTML = '<div class="hint">画布为空，请添加元素</div>';
+    return;
+  }
+  list.innerHTML = elements.map(el => {
+    const isSelected = selectedEl && selectedEl.id === el.id;
+    if (el.kind === 'line') {
+      const lockIcon = el.fixed ? ' 🔒' : '';
+      return `<div class="element-list-item" style="${isSelected ? 'border:1.5px solid var(--primary);' : ''}" data-id="${el.id}">
+        <span>线段 #${el.id} (${el.length.toFixed(0)}px)${lockIcon}</span>
+        <button class="del-btn" data-del="${el.id}">✕</button>
+      </div>`;
+    } else {
+      const type = getAngleType(el.angle);
+      return `<div class="element-list-item" style="${isSelected ? 'border:1.5px solid var(--primary);' : ''}" data-id="${el.id}">
+        <span>角 #${el.id} (${el.angle.toFixed(1)}° ${type.label})</span>
+        <button class="del-btn" data-del="${el.id}">✕</button>
+      </div>`;
+    }
+  }).join('');
+
+  list.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = parseInt(btn.dataset.del);
+      elements = elements.filter(l => l.id !== id);
+      if (selectedEl && selectedEl.id === id) { selectedEl = null; hideProps(); }
+      drawInteractive();
+    });
+  });
+
+  list.querySelectorAll('[data-id]').forEach(item => {
+    item.addEventListener('click', () => {
+      const id = parseInt(item.dataset.id);
+      selectedEl = elements.find(l => l.id === id);
+      showProps(selectedEl);
+      drawInteractive();
+    });
+  });
+}
+
+// 添加线段
+document.getElementById('addLine').addEventListener('click', () => {
+  const w = iCanvas.width / devicePixelRatio;
+  const h = iCanvas.height / devicePixelRatio;
+  const el = createLine(w / 2 - 60 + Math.random() * 40, h / 2 - 20 + Math.random() * 40);
+  elements.push(el);
+  selectedEl = el;
+  showProps(el);
+  drawInteractive();
+});
+
+// 添加角
+document.getElementById('addAngle').addEventListener('click', () => {
+  const w = iCanvas.width / devicePixelRatio;
+  const h = iCanvas.height / devicePixelRatio;
+  const el = createAngle(w / 2 - 50 + Math.random() * 40, h / 2 + Math.random() * 40);
+  elements.push(el);
+  selectedEl = el;
+  showProps(el);
+  drawInteractive();
+});
+
+// 拖拽
+function getMousePos(e) {
+  const rect = iCanvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function hitTest(pos) {
+  // 第一阶段：检查所有端点（端点优先级高于线段主体）
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const el = elements[i];
+    if (el.kind === 'line') {
+      const pts = [{ x: el.x1, y: el.y1, idx: 0 }, { x: el.x2, y: el.y2, idx: 1 }];
+      for (const p of pts) {
+        if (Math.hypot(pos.x - p.x, pos.y - p.y) < HIT_RADIUS) {
+          const shared = elements.filter(l => {
+            if (l.id === el.id) return true;
+            if (l.kind === 'line' && l.fixed) return false;
+            return Math.hypot(l.x1 - p.x, l.y1 - p.y) < SNAP_DIST ||
+                   Math.hypot(l.x2 - p.x, l.y2 - p.y) < SNAP_DIST;
+          }).map(l => ({
+            el: l,
+            pointIdx: (Math.hypot(l.x1 - p.x, l.y1 - p.y) < SNAP_DIST) ? 0 : 1
+          }));
+          return { el, pointIndex: p.idx, sharedEls: shared };
+        }
+      }
+    } else {
+      const ep = getAngleEndpoints(el);
+      const pts = [
+        { x: ep.fEnd.x, y: ep.fEnd.y, idx: 2 },
+        { x: el.x, y: el.y, idx: 0 },
+        { x: ep.hEnd.x, y: ep.hEnd.y, idx: 1 }
+      ];
+      for (const p of pts) {
+        if (Math.hypot(pos.x - p.x, pos.y - p.y) < HIT_RADIUS) {
+          return { el, pointIndex: p.idx, sharedEls: [{ el, pointIdx: p.idx }] };
+        }
+      }
+    }
+  }
+  // 第二阶段：检查线段主体
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const el = elements[i];
+    if (el.kind !== 'line' || el.fixed) continue;
+    const dx = el.x2 - el.x1, dy = el.y2 - el.y1;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) continue;
+    const t = Math.max(0, Math.min(1, ((pos.x - el.x1) * dx + (pos.y - el.y1) * dy) / (len * len)));
+    const px = el.x1 + t * dx, py = el.y1 + t * dy;
+    if (Math.hypot(pos.x - px, pos.y - py) < LINE_HIT_RADIUS) return { el, pointIndex: -1, sharedEls: [{ el, pointIdx: -1 }] };
+  }
+  return null;
+}
+
+iCanvas.addEventListener('mousedown', e => {
+  const pos = getMousePos(e);
+  const hit = hitTest(pos);
+  if (hit) {
+    dragging = hit;
+    selectedEl = hit.el;
+    showProps(hit.el);
+    drawInteractive();
+  } else {
+    selectedEl = null;
+    hideProps();
+    drawInteractive();
+  }
+});
+
+// 通用拖拽处理函数
+function handleDrag(pos) {
+  if (!dragging) return;
+  const el = dragging.el;
+
+  const shared = dragging.sharedEls || [{ el, pointIdx: dragging.pointIndex }];
+  const excludeIds = new Set(shared.map(s => s.el.id));
+
+  let fx = pos.x, fy = pos.y, snapped = false;
+  elements.forEach(other => {
+    if (excludeIds.has(other.id)) return;
+    let otherPts = [];
+    if (other.kind === 'line') {
+      otherPts = [{ x: other.x1, y: other.y1 }, { x: other.x2, y: other.y2 }];
+    } else {
+      const ep = getAngleEndpoints(other);
+      otherPts = [{ x: other.x, y: other.y }, { x: ep.hEnd.x, y: ep.hEnd.y }, { x: ep.fEnd.x, y: ep.fEnd.y }];
+    }
+    otherPts.forEach(p => {
+      if (Math.hypot(pos.x - p.x, pos.y - p.y) < SNAP_DIST) { fx = p.x; fy = p.y; snapped = true; }
+    });
+  });
+
+  showSnap(snapped);
+
+  if (el.kind === 'line') {
+    if (dragging.pointIndex === -1) {
+      const dx = pos.x - (el.x1 + el.x2) / 2;
+      const dy = pos.y - (el.y1 + el.y2) / 2;
+      el.x1 += dx; el.y1 += dy; el.x2 += dx; el.y2 += dy;
+      el.length = Math.hypot(el.x2 - el.x1, el.y2 - el.y1);
+    } else {
+      if (el.fixed) {
+        const dx = el.x2 - el.x1, dy = el.y2 - el.y1;
+        const len = Math.hypot(dx, dy);
+        if (len > 0) {
+          let ux = dx / len, uy = dy / len;
+          const anchorX = dragging.pointIndex === 0 ? el.x2 : el.x1;
+          const anchorY = dragging.pointIndex === 0 ? el.y2 : el.y1;
+          const t = (pos.x - anchorX) * ux + (pos.y - anchorY) * uy;
+          let dirX = ux, dirY = uy;
+          let absT = t;
+          if (t < 0) { dirX = -ux; dirY = -uy; absT = -t; }
+          const newLen = Math.max(20, Math.min(400, absT));
+          if (dragging.pointIndex === 0) {
+            el.x1 = anchorX + dirX * newLen; el.y1 = anchorY + dirY * newLen;
+          } else {
+            el.x2 = anchorX + dirX * newLen; el.y2 = anchorY + dirY * newLen;
+          }
+          el.length = newLen;
+        }
+      } else {
+        shared.forEach(s => {
+          if (s.pointIdx === 0) { s.el.x1 = fx; s.el.y1 = fy; }
+          else if (s.pointIdx === 1) { s.el.x2 = fx; s.el.y2 = fy; }
+          s.el.length = Math.hypot(s.el.x2 - s.el.x1, s.el.y2 - s.el.y1);
+        });
+      }
+    }
+  } else {
+    // 角元素拖拽
+    if (dragging.pointIndex === 0) {
+      // 拖拽顶点：整体移动
+      const dx = pos.x - el.x, dy = pos.y - el.y;
+      el.x += dx; el.y += dy;
+    } else if (dragging.pointIndex === 1) {
+      // 拖拽水平端点：只改变水平边长度
+      const newLen = Math.max(20, Math.min(400, pos.x - el.x));
+      el.hLength = newLen;
+    } else if (dragging.pointIndex === 2) {
+      // 拖拽自由端点：改变角度和长度
+      const dx = pos.x - el.x, dy = el.y - pos.y;
+      let newAngle;
+      if (dy < 0) {
+        // 鼠标在水平线下方：右侧钳制到0°，左侧钳制到180°
+        newAngle = dx >= 0 ? 0 : 180;
+      } else {
+        newAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+        newAngle = Math.max(0, Math.min(180, newAngle));
+      }
+      // 接近90°时自动吸附
+      if (Math.abs(newAngle - 90) < 1) newAngle = 90;
+      el.angle = newAngle;
+      const newLen = Math.max(20, Math.min(400, Math.hypot(dx, dy)));
+      el.fLength = newLen;
+    }
+  }
+
+  requestDraw(true);
+}
+
+iCanvas.addEventListener('mousemove', e => {
+  const pos = getMousePos(e);
+  if (!dragging) {
+    const hit = hitTest(pos);
+    iCanvas.style.cursor = hit ? 'grab' : 'default';
+    return;
+  }
+  iCanvas.style.cursor = 'grabbing';
+  handleDrag(pos);
+});
+
+iCanvas.addEventListener('mouseup', () => {
+  dragging = null;
+  iCanvas.style.cursor = 'default';
+  showSnap(false);
+  if (selectedEl) showProps(selectedEl);
+  drawInteractive();
+});
+iCanvas.addEventListener('mouseleave', () => {
+  if (dragging) { dragging = null; showSnap(false); drawInteractive(); }
+});
+
+// 触摸事件支持
+iCanvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const pos = getTouchPos(e);
+  const hit = hitTest(pos);
+  if (hit) {
+    dragging = hit;
+    selectedEl = hit.el;
+    showProps(hit.el);
+    drawInteractive();
+  } else {
+    selectedEl = null;
+    hideProps();
+    drawInteractive();
+  }
+}, { passive: false });
+
+iCanvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const pos = getTouchPos(e);
+  if (!dragging) return;
+  iCanvas.style.cursor = 'grabbing';
+  handleDrag(pos);
+}, { passive: false });
+
+iCanvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  dragging = null;
+  iCanvas.style.cursor = 'default';
+  showSnap(false);
+  if (selectedEl) showProps(selectedEl);
+  drawInteractive();
+}, { passive: false });
+
+iCanvas.addEventListener('touchcancel', e => {
+  e.preventDefault();
+  if (dragging) { dragging = null; showSnap(false); drawInteractive(); }
+}, { passive: false });
+
+function showSnap(v) {
+  document.getElementById('snapIndicator').classList.toggle('visible', v);
+}
+
+// 属性面板
+function showProps(el) {
+  const panel = document.getElementById('propsPanel');
+  const title = document.getElementById('propsTitle');
+  const content = document.getElementById('propsContent');
+  panel.classList.add('visible');
+
+  if (el.kind === 'line') {
+    title.textContent = `线段 #${el.id}`;
+    content.innerHTML = `
+      <div class="prop-row">
+        <div class="prop-label">长度: <strong id="lenVal">${el.length.toFixed(0)}</strong> px</div>
+        <input type="range" class="prop-slider" id="lenSlider" min="20" max="400" value="${el.length.toFixed(0)}" ${el.fixed ? 'disabled' : ''}>
+        <input type="number" class="prop-input" id="lenInput" min="20" max="400" value="${el.length.toFixed(0)}" style="margin-top:6px;" ${el.fixed ? 'disabled' : ''}>
+      </div>
+      <div class="prop-row">
+        <button class="btn ${el.fixed ? 'btn-outline' : 'btn-primary'} btn-sm" id="btnToggleFixed" style="width:100%;justify-content:center;">
+          ${el.fixed ? '🔓 解锁' : '🔒 固定'}
+        </button>
+      </div>
+    `;
+    const slider = document.getElementById('lenSlider');
+    const input = document.getElementById('lenInput');
+    const val = document.getElementById('lenVal');
+    const updateLen = v => {
+      if (el.fixed) return;
+      v = Math.max(20, Math.min(400, parseFloat(v) || 20));
+      const dx = el.x2 - el.x1, dy = el.y2 - el.y1;
+      const curLen = Math.hypot(dx, dy);
+      if (curLen === 0) return;
+      const ratio = v / curLen;
+      el.x2 = el.x1 + dx * ratio;
+      el.y2 = el.y1 + dy * ratio;
+      el.length = v;
+      slider.value = v; input.value = v; val.textContent = v.toFixed(0);
+      drawInteractive();
+    };
+    slider.addEventListener('input', e => updateLen(e.target.value));
+    input.addEventListener('change', e => updateLen(e.target.value));
+
+    document.getElementById('btnToggleFixed').addEventListener('click', () => {
+      el.fixed = !el.fixed;
+      showProps(el);
+      drawInteractive();
+    });
+  } else {
+    const type = getAngleType(el.angle);
+    title.textContent = `角 #${el.id}`;
+    content.innerHTML = `
+      <div class="prop-row">
+        <div class="prop-label">角度: <strong id="angleVal">${el.angle.toFixed(1)}</strong>° <span style="color:${type.color};font-size:12px;">(${type.label})</span></div>
+        <input type="range" class="prop-slider" id="angleSlider" min="0" max="180" step="0.5" value="${el.angle}">
+        <input type="number" class="prop-input" id="angleInput" min="0" max="180" step="0.5" value="${el.angle.toFixed(1)}" style="margin-top:6px;">
+      </div>
+      <div class="prop-row">
+        <div class="prop-label">水平边长度: <strong id="hLenVal">${el.hLength.toFixed(0)}</strong> px</div>
+        <input type="range" class="prop-slider" id="hLenSlider" min="20" max="400" value="${el.hLength.toFixed(0)}">
+        <input type="number" class="prop-input" id="hLenInput" min="20" max="400" value="${el.hLength.toFixed(0)}" style="margin-top:6px;">
+      </div>
+      <div class="prop-row">
+        <div class="prop-label">自由边长度: <strong id="fLenVal">${el.fLength.toFixed(0)}</strong> px</div>
+        <input type="range" class="prop-slider" id="fLenSlider" min="20" max="400" value="${el.fLength.toFixed(0)}">
+        <input type="number" class="prop-input" id="fLenInput" min="20" max="400" value="${el.fLength.toFixed(0)}" style="margin-top:6px;">
+      </div>
+    `;
+
+    const angleSlider = document.getElementById('angleSlider');
+    const angleInput = document.getElementById('angleInput');
+    const angleVal = document.getElementById('angleVal');
+    const updateAngle = v => {
+      v = Math.max(0, Math.min(180, parseFloat(v) || 0));
+      el.angle = v;
+      const t = getAngleType(v);
+      angleVal.textContent = v.toFixed(1);
+      angleVal.parentElement.querySelector('span').textContent = `(${t.label})`;
+      angleVal.parentElement.querySelector('span').style.color = t.color;
+      angleSlider.value = v; angleInput.value = v.toFixed(1);
+      drawInteractive();
+    };
+    angleSlider.addEventListener('input', e => updateAngle(e.target.value));
+    angleInput.addEventListener('change', e => updateAngle(e.target.value));
+
+    const hSlider = document.getElementById('hLenSlider');
+    const hInput = document.getElementById('hLenInput');
+    const hVal = document.getElementById('hLenVal');
+    const updateHLen = v => {
+      v = Math.max(20, Math.min(400, parseFloat(v) || 20));
+      el.hLength = v;
+      hSlider.value = v; hInput.value = v.toFixed(0); hVal.textContent = v.toFixed(0);
+      drawInteractive();
+    };
+    hSlider.addEventListener('input', e => updateHLen(e.target.value));
+    hInput.addEventListener('change', e => updateHLen(e.target.value));
+
+    const fSlider = document.getElementById('fLenSlider');
+    const fInput = document.getElementById('fLenInput');
+    const fVal = document.getElementById('fLenVal');
+    const updateFLen = v => {
+      v = Math.max(20, Math.min(400, parseFloat(v) || 20));
+      el.fLength = v;
+      fSlider.value = v; fInput.value = v.toFixed(0); fVal.textContent = v.toFixed(0);
+      drawInteractive();
+    };
+    fSlider.addEventListener('input', e => updateFLen(e.target.value));
+    fInput.addEventListener('change', e => updateFLen(e.target.value));
+  }
+}
+
+function hideProps() {
+  document.getElementById('propsPanel').classList.remove('visible');
+}
+
+document.getElementById('propsDelete').addEventListener('click', () => {
+  if (selectedEl) {
+    elements = elements.filter(l => l.id !== selectedEl.id);
+    selectedEl = null;
+    hideProps();
+    drawInteractive();
+  }
+});
+</script>
+</body>
+</html>

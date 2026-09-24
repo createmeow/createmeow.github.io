@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minecraft 模组 AI 提示词生成器</title>
+<style>
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    padding: 28px 16px 60px;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: radial-gradient(900px 500px at 15% -10%, #14261c 0%, transparent 60%),
+                radial-gradient(800px 500px at 90% 0%, #101c26 0%, transparent 55%),
+                #0d1117;
+    color: #e6edf3;
+  }
+
+  .wrap { max-width: 1140px; margin: 0 auto; }
+
+  header h1 {
+    font-size: 21px;
+    margin: 0 0 6px;
+    letter-spacing: .5px;
+  }
+  header .sub {
+    margin: 0 0 22px;
+    font-size: 13px;
+    color: #7d8896;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 880px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: #161b22;
+    border: 1px solid #262d36;
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.35);
+  }
+
+  /* ---------- 行 / 标签 ---------- */
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .row:last-child { margin-bottom: 0; }
+
+  .label {
+    flex: 0 0 84px;
+    font-size: 13px;
+    color: #98a3b0;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  /* ---------- 控件 ---------- */
+  input[type="text"], select {
+    width: 100%;
+    background: #0d1117;
+    border: 1px solid #2b333d;
+    color: #e6edf3;
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  input[type="text"]::placeholder { color: #4d5866; }
+
+  input[type="text"]:focus, select:focus {
+    border-color: #4ade80;
+    background: #0e1419;
+    box-shadow: 0 0 0 3px rgba(74, 222, 128, .12);
+  }
+
+  select {
+    cursor: pointer;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, #6b7684 50%),
+                      linear-gradient(135deg, #6b7684 50%, transparent 50%);
+    background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 30px;
+  }
+  select option { background: #161b22; }
+
+  /* ---------- 模式按钮 ---------- */
+  .modes { display: flex; gap: 8px; }
+
+  .mode-btn {
+    padding: 8px 18px;
+    font-size: 13px;
+    font-family: inherit;
+    border-radius: 8px;
+    border: 1px solid #2b333d;
+    background: #0d1117;
+    color: #98a3b0;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .mode-btn:hover { border-color: #3d4753; color: #e6edf3; }
+  .mode-btn.active {
+    background: rgba(74, 222, 128, .13);
+    border-color: #4ade80;
+    color: #4ade80;
+    box-shadow: 0 0 0 3px rgba(74, 222, 128, .08);
+  }
+
+  /* ---------- 分隔线 ---------- */
+  .divider {
+    border: none;
+    border-top: 1px solid #222a33;
+    margin: 16px 0;
+  }
+
+  /* ---------- 新增行 ---------- */
+  #newName { flex: 1 1 auto; min-width: 0; }
+  #newType { flex: 0 0 110px; }
+
+  .add-btn {
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    font-size: 21px;
+    line-height: 1;
+    border-radius: 8px;
+    border: 1px solid #4ade80;
+    background: rgba(74, 222, 128, .13);
+    color: #4ade80;
+    cursor: pointer;
+    transition: all .15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .add-btn:hover { background: rgba(74, 222, 128, .25); }
+  .add-btn:active { transform: scale(.94); }
+
+  /* ---------- 项目行 ---------- */
+  #itemList { margin-bottom: 10px; }
+
+  .item-row {
+    background: #0f141a;
+    border: 1px solid #222a33;
+    border-radius: 9px;
+    padding: 8px;
+    gap: 6px;
+    margin-bottom: 8px;
+    animation: pop .18s ease;
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .item-row .in-name { flex: 1 1 0;     min-width: 0; }
+  .item-row .in-desc { flex: 1.7 1 0;   min-width: 0; }
+  .item-row .in-id   { flex: 1 1 0;     min-width: 0; }
+
+  .item-row input {
+    padding: 7px 9px;
+    font-size: 12.5px;
+    border-radius: 6px;
+  }
+
+  .del-btn {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid #3a2626;
+    background: rgba(248, 81, 73, .1);
+    color: #f85149;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    transition: all .15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .del-btn:hover { background: rgba(248, 81, 73, .25); border-color: #f85149; }
+
+  /* ---------- 输出区 ---------- */
+  .output-panel { position: sticky; top: 22px; }
+
+  .out-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: #98a3b0;
+  }
+
+  #copyBtn {
+    padding: 5px 15px;
+    font-size: 12px;
+    font-family: inherit;
+    border-radius: 7px;
+    border: 1px solid #30363d;
+    background: #21262d;
+    color: #e6edf3;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  #copyBtn:hover { background: #2d333b; border-color: #4ade80; color: #4ade80; }
+  #copyBtn:active { transform: scale(.96); }
+
+  #output {
+    margin: 0;
+    padding: 15px 16px;
+    min-height: 240px;
+    max-height: 62vh;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, "SF Mono", Consolas, "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.9;
+    color: #a8e6b8;
+    background: #0b0f14;
+    border: 1px solid #222a33;
+    border-radius: 9px;
+  }
+  #output:empty::before {
+    content: attr(data-placeholder);
+    color: #4b5563;
+    font-family: "Segoe UI", "PingFang SC", sans-serif;
+  }
+
+  /* ---------- 提示条 ---------- */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 34px;
+    transform: translate(-50%, 16px);
+    padding: 9px 22px;
+    border-radius: 22px;
+    background: #4ade80;
+    color: #052e16;
+    font-size: 13px;
+    font-weight: 700;
+    opacity: 0;
+    pointer-events: none;
+    transition: all .25s ease;
+    z-index: 99;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  .hidden { display: none !important; }
+
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: #2b333d;
+    border-radius: 5px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #3d4753; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Minecraft Mod AI 提示词生成器</h1>
+    <p class="sub">填写下方信息，右侧自动生成结构化的 AI 提示词</p>
+  </header>
+
+  <div class="grid">
+
+    <!-- ========== 左侧表单 ========== -->
+    <main class="panel">
+
+      <!-- 模式 -->
+      <div class="row">
+        <span class="label">模式</span>
+        <div class="modes">
+          <button class="mode-btn active" data-mode="new">从新编写</button>
+          <button class="mode-btn" data-mode="add">新增</button>
+        </div>
+      </div>
+
+      <!-- 仅「从新编写」时显示 -->
+      <div id="newBlock">
+        <div class="row">
+          <span class="label">版本信息</span>
+          <input id="version" type="text" placeholder="例如 1.21.1">
+        </div>
+
+        <div class="row">
+          <span class="label">模组加载器</span>
+          <input id="loader" type="text" placeholder="例如 neoforge">
+          <select id="loaderSel" style="flex:0 0 130px">
+            <option value="">选择…</option>
+            <option value="neoforge">neoforge</option>
+            <option value="forge">forge</option>
+            <option value="fabric">fabric</option>
+            <option value="quilt">quilt</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <span class="label">模组名称</span>
+          <input id="modName" type="text" placeholder="例如 机械动力">
+        </div>
+
+        <div class="row">
+          <span class="label">模组ID</span>
+          <input id="modId" type="text" placeholder="例如 create">
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- 通用：新增 -->
+      <div class="row">
+        <span class="label">新增</span>
+        <input id="newName" type="text" placeholder="名称，如 铜锭">
+        <select id="newType"></select>
+        <button id="addBtn" class="add-btn" title="添加">+</button>
+      </div>
+
+      <!-- 项目列表 -->
+      <div id="itemList"></div>
+
+      <!-- 补充信息 -->
+      <div class="row">
+        <span class="label">补充信息</span>
+        <input id="extra" type="text" placeholder="其他要求，如 代码简洁、使用官方映射">
+      </div>
+
+    </main>
+
+    <!-- ========== 右侧输出 ========== -->
+    <aside class="panel output-panel">
+      <div class="out-head">
+        <span>生成结果</span>
+        <button id="copyBtn">复制</button>
+      </div>
+      <pre id="output" data-placeholder="填写左侧信息后自动生成…"></pre>
+    </aside>
+
+  </div>
+</div>
+
+<div class="toast" id="toast">已复制到剪贴板</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- 类型列表 ---------------- */
+  const TYPES = [
+    '物品', '方块', '维度', '生物', '工具', '武器', '护甲', '食物',
+    '流体', '药水', '附魔', '配方', '粒子效果', '音效', '生物群系',
+    '结构', '矿物', 'GUI界面', '命令', '进度', '其他'
+  ];
+
+  /* ---------------- 状态 ---------------- */
+  let mode = 'new';          // 'new' | 'add'
+  let items = [];            // { name, type, desc, id }
+
+  /* ---------------- 工具 ---------------- */
+  const $ = (id) => document.getElementById(id);
+
+  const esc = (s) => String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  /* ---------------- 初始化类型下拉 ---------------- */
+  const typeSel = $('newType');
+  TYPES.forEach(function (t) {
+    const o = document.createElement('option');
+    o.value = t;
+    o.textContent = t;
+    typeSel.appendChild(o);
+  });
+
+  /* ---------------- 渲染项目列表 ---------------- */
+  function renderItems() {
+    const list = $('itemList');
+    list.innerHTML = '';
+
+    items.forEach(function (it, i) {
+      const row = document.createElement('div');
+      row.className = 'row item-row';
+      row.innerHTML =
+        '<input class="in-name" data-i="' + i + '" data-k="name" type="text" ' +
+          'placeholder="名称" value="' + esc(it.name) + '">' +
+        '<input class="in-desc" data-i="' + i + '" data-k="desc" type="text" ' +
+          'placeholder="描述" value="' + esc(it.desc) + '">' +
+        '<input class="in-id"   data-i="' + i + '" data-k="id"   type="text" ' +
+          'placeholder="ID" value="' + esc(it.id) + '">' +
+        '<button class="del-btn" data-del="' + i + '" title="删除">×</button>';
+      list.appendChild(row);
+    });
+
+    update();
+  }
+
+  /* ---------------- 列表事件（委托） ---------------- */
+  $('itemList').addEventListener('input', function (e) {
+    const inp = e.target;
+    if (!inp.matches('input[data-i]')) return;
+    items[Number(inp.dataset.i)][inp.dataset.k] = inp.value;
+    update();
+  });
+
+  $('itemList').addEventListener('click', function (e) {
+    const btn = e.target.closest('[data-del]');
+    if (!btn) return;
+    items.splice(Number(btn.dataset.del), 1);
+    renderItems();
+  });
+
+  /* ---------------- 添加项目 ---------------- */
+  function addItem() {
+    const name = $('newName').value.trim();
+    if (!name) {
+      $('newName').focus();
+      return;
+    }
+    items.push({
+      name: name,
+      type: $('newType').value,
+      desc: '',
+      id: ''
+    });
+    $('newName').value = '';
+    $('newName').focus();
+    renderItems();
+
+    // 自动聚焦到新行的「描述」输入框
+    const rows = $('itemList').querySelectorAll('.item-row');
+    const last = rows[rows.length - 1];
+    if (last) last.querySelector('.in-desc').focus();
+  }
+
+  $('addBtn').addEventListener('click', addItem);
+
+  $('newName').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addItem();
+    }
+  });
+
+  /* ---------------- 模式切换 ---------------- */
+  document.querySelectorAll('.mode-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      mode = btn.dataset.mode;
+      document.querySelectorAll('.mode-btn').forEach(function (b) {
+        b.classList.toggle('active', b === btn);
+      });
+      $('newBlock').classList.toggle('hidden', mode !== 'new');
+      update();
+    });
+  });
+
+  /* ---------------- 加载器下拉 → 输入框 ---------------- */
+  $('loaderSel').addEventListener('change', function (e) {
+    if (e.target.value) {
+      $('loader').value = e.target.value;
+      update();
+    }
+  });
+
+  /* ---------------- 输入监听 ---------------- */
+  ['version', 'loader', 'modName', 'modId', 'extra'].forEach(function (id) {
+    $(id).addEventListener('input', update);
+  });
+
+  /* ---------------- 生成文本 ---------------- */
+  function update() {
+    const lines = [];
+
+    /* 第一段：从新编写 */
+    if (mode === 'new') {
+      const ver    = $('version').value.trim() || 'x.x.x';
+      const loader = $('loader').value.trim()  || 'x';
+      lines.push('帮我做一个Minecraft ' + ver + '模组，使用' + loader + '加载器');
+
+      const mName = $('modName').value.trim();
+      const mId   = $('modId').value.trim();
+      const meta  = [];
+      if (mName) meta.push('模组名称：' + mName);
+      if (mId)   meta.push('模组ID：' + mId);
+      if (meta.length) lines.push(meta.join('，'));
+    }
+
+    /* 第二段：注册条目 */
+    items.forEach(function (it) {
+      const name = (it.name || '').trim();
+      const id   = (it.id   || '').trim();
+      const desc = (it.desc || '').trim();
+      const type = it.type || '';
+
+      if (!name && !id && !desc) return;
+
+      let s = '注册 ' + name + ' ' + type;
+      if (id)   s += '，ID：' + id;
+      if (desc) s += '，' + desc;
+      lines.push(s);
+    });
+
+    /* 第三段：补充信息 */
+    const extra = $('extra').value.trim();
+    if (extra) lines.push(extra);
+
+    $('output').textContent = lines.join('\n');
+  }
+
+  /* ---------------- 复制 ---------------- */
+  const toast = $('toast');
+  let toastTimer = null;
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      toast.classList.remove('show');
+    }, 1600);
+  }
+
+  $('copyBtn').addEventListener('click', function () {
+    const text = $('output').textContent;
+    if (!text) {
+      showToast('暂无可复制内容');
+      return;
+    }
+
+    const done = function () { showToast('已复制到剪贴板'); };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () {
+        fallbackCopy(text, done);
+      });
+    } else {
+      fallbackCopy(text, done);
+    }
+  });
+
+  function fallbackCopy(text, cb) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); cb(); } catch (err) { /* ignore */ }
+    document.body.removeChild(ta);
+  }
+
+  /* ---------------- 启动 ---------------- */
+  renderItems();
+
+})();
+</script>
+
+</body>
+</html>
